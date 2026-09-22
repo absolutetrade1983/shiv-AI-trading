@@ -1,472 +1,392 @@
-// SHIV AI TRADING
-// Multi-Strategy Consensus Engine
-// Strategy 1: EMA Trend
-// Strategy 2: RSI Momentum
-// Strategy 3: VWAP / Volume
-//
-// IMPORTANT:
-// This file currently works as the strategy engine.
-// Live NIFTY/BANKNIFTY data will be connected separately.
+// ============================================================
+// SHIV AI TRADING - APP CONTROLLER
+// Connects app.js with the Master strategy.js engine
+// ============================================================
 
-"use strict";
+(function () {
+  "use strict";
 
-/* =========================
-   SETTINGS
-========================= */
+  // ------------------------------------------------------------
+  // CHECK MASTER ENGINE
+  // ------------------------------------------------------------
 
-const SETTINGS = {
-  minimumAgreement: 2,
+  function getEngine() {
+    if (
+      typeof window !== "undefined" &&
+      window.SHIV_AI_STRATEGY &&
+      typeof window.SHIV_AI_STRATEGY.analyzeNifty === "function"
+    ) {
+      return window.SHIV_AI_STRATEGY;
+    }
 
-  emaFast: 9,
-  emaSlow: 21,
-
-  rsiPeriod: 14,
-  rsiBuyLevel: 55,
-  rsiSellLevel: 45,
-
-  volumeMultiplier: 1.2
-};
-
-
-/* =========================
-   BASIC HELPERS
-========================= */
-
-function average(values) {
-  if (!values.length) return 0;
-
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-
-function calculateEMA(values, period) {
-  if (values.length < period) return null;
-
-  const multiplier = 2 / (period + 1);
-
-  let ema = average(values.slice(0, period));
-
-  for (let i = period; i < values.length; i++) {
-    ema = ((values[i] - ema) * multiplier) + ema;
+    return null;
   }
 
-  return ema;
-}
+  // ------------------------------------------------------------
+  // ANALYZE MARKET
+  // ------------------------------------------------------------
 
+  function analyzeMarket(candles) {
+    const engine = getEngine();
 
-function calculateRSI(closes, period = 14) {
-  if (closes.length <= period) return null;
+    if (!engine) {
+      return {
+        signal: "WAIT",
+        confidence: 0,
+        error:
+          "Master strategy engine not loaded. Load strategy.js before app.js."
+      };
+    }
 
-  let gains = 0;
-  let losses = 0;
+    if (!Array.isArray(candles) || candles.length < 50) {
+      return {
+        signal: "WAIT",
+        confidence: 0,
+        error: "Minimum 50 candles required."
+      };
+    }
 
-  for (let i = 1; i <= period; i++) {
-    const change = closes[i] - closes[i - 1];
-
-    if (change > 0) {
-      gains += change;
-    } else {
-      losses += Math.abs(change);
+    try {
+      return engine.analyzeNifty(candles);
+    } catch (error) {
+      return {
+        signal: "WAIT",
+        confidence: 0,
+        error: error.message
+      };
     }
   }
 
-  let averageGain = gains / period;
-  let averageLoss = losses / period;
+  // ------------------------------------------------------------
+  // FORMAT RESULT
+  // ------------------------------------------------------------
 
-  for (let i = period + 1; i < closes.length; i++) {
-    const change = closes[i] - closes[i - 1];
+  function formatResult(result) {
+    if (!result) {
+      return "No result";
+    }
 
-    const gain = change > 0 ? change : 0;
-    const loss = change < 0 ? Math.abs(change) : 0;
-
-    averageGain =
-      ((averageGain * (period - 1)) + gain) / period;
-
-    averageLoss =
-      ((averageLoss * (period - 1)) + loss) / period;
-  }
-
-  if (averageLoss === 0) return 100;
-
-  const relativeStrength = averageGain / averageLoss;
-
-  return 100 - (100 / (1 + relativeStrength));
-}
-
-
-/* =========================
-   STRATEGY 1
-   EMA TREND
-========================= */
-
-function strategyEMA(closes) {
-
-  const fastEMA = calculateEMA(
-    closes,
-    SETTINGS.emaFast
-  );
-
-  const slowEMA = calculateEMA(
-    closes,
-    SETTINGS.emaSlow
-  );
-
-  if (fastEMA === null || slowEMA === null) {
     return {
-      name: "EMA Trend",
-      signal: "WAIT",
-      reason: "Not enough data"
+      market: result.market || "NIFTY",
+      timeframe: result.timeframe || "5m",
+
+      signal: result.signal || "WAIT",
+
+      confidence: result.confidence || 0,
+
+      entry: result.entry ?? null,
+
+      stopLoss: result.stopLoss ?? null,
+
+      target: result.target ?? null,
+
+      buyScore: result.buyScore || 0,
+
+      sellScore: result.sellScore || 0,
+
+      buyAgreement: result.buyAgreement || 0,
+
+      sellAgreement: result.sellAgreement || 0,
+
+      trend: result.trend || "NEUTRAL",
+
+      rsi: result.rsi ?? null,
+
+      vwap: result.vwap ?? null,
+
+      atr: result.atr ?? null,
+
+      marketStructure:
+        result.marketStructure || "NEUTRAL",
+
+      bos: result.bos || "NONE",
+
+      choch: result.choch || "NONE",
+
+      fvg: result.fvg || "NONE",
+
+      liquidity:
+        result.liquidity || "NONE",
+
+      fibonacci:
+        result.fibonacci || "NONE",
+
+      priceRange:
+        result.priceRange || "NONE",
+
+      volume:
+        result.volume || "NORMAL",
+
+      emaFast:
+        result.emaFast ?? null,
+
+      emaSlow:
+        result.emaSlow ?? null,
+
+      reasons:
+        result.reasons || [],
+
+      votes:
+        result.votes || [],
+
+      timestamp:
+        result.timestamp || new Date().toISOString()
     };
   }
 
-  if (fastEMA > slowEMA) {
-    return {
-      name: "EMA Trend",
-      signal: "BUY",
-      reason: "9 EMA above 21 EMA",
-      fastEMA,
-      slowEMA
+  // ------------------------------------------------------------
+  // TEST CANDLE GENERATOR
+  // ------------------------------------------------------------
+
+  function generateTestCandles(count = 100) {
+    const candles = [];
+
+    let price = 24000;
+
+    for (let i = 0; i < count; i++) {
+      const movement =
+        Math.sin(i / 5) * 25 +
+        (Math.random() - 0.45) * 35;
+
+      const open = price;
+
+      const close =
+        price + movement;
+
+      const high =
+        Math.max(open, close) +
+        Math.random() * 20;
+
+      const low =
+        Math.min(open, close) -
+        Math.random() * 20;
+
+      const volume =
+        100000 +
+        Math.random() * 50000;
+
+      candles.push({
+        time:
+          Date.now() -
+          (count - i) * 5 * 60 * 1000,
+
+        open,
+        high,
+        low,
+        close,
+        volume
+      });
+
+      price = close;
+    }
+
+    return candles;
+  }
+
+  // ------------------------------------------------------------
+  // RUN TEST
+  // ------------------------------------------------------------
+
+  function runTest() {
+    const candles =
+      generateTestCandles(100);
+
+    const result =
+      analyzeMarket(candles);
+
+    const formatted =
+      formatResult(result);
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "       SHIV AI TRADING TEST"
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "Signal:",
+      formatted.signal
+    );
+
+    console.log(
+      "Confidence:",
+      formatted.confidence + "%"
+    );
+
+    console.log(
+      "Entry:",
+      formatted.entry
+    );
+
+    console.log(
+      "Stop Loss:",
+      formatted.stopLoss
+    );
+
+    console.log(
+      "Target:",
+      formatted.target
+    );
+
+    console.log(
+      "Buy Score:",
+      formatted.buyScore
+    );
+
+    console.log(
+      "Sell Score:",
+      formatted.sellScore
+    );
+
+    console.log(
+      "Buy Agreement:",
+      formatted.buyAgreement
+    );
+
+    console.log(
+      "Sell Agreement:",
+      formatted.sellAgreement
+    );
+
+    console.log(
+      "Trend:",
+      formatted.trend
+    );
+
+    console.log(
+      "Market Structure:",
+      formatted.marketStructure
+    );
+
+    console.log(
+      "BOS:",
+      formatted.bos
+    );
+
+    console.log(
+      "CHOCH:",
+      formatted.choch
+    );
+
+    console.log(
+      "FVG:",
+      formatted.fvg
+    );
+
+    console.log(
+      "Liquidity:",
+      formatted.liquidity
+    );
+
+    console.log(
+      "Fibonacci:",
+      formatted.fibonacci
+    );
+
+    console.log(
+      "Price Range:",
+      formatted.priceRange
+    );
+
+    console.log(
+      "Volume:",
+      formatted.volume
+    );
+
+    console.log(
+      "RSI:",
+      formatted.rsi
+    );
+
+    console.log(
+      "VWAP:",
+      formatted.vwap
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "Reasons:",
+      formatted.reasons
+    );
+
+    console.log(
+      "Votes:",
+      formatted.votes
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    return formatted;
+  }
+
+  // ------------------------------------------------------------
+  // PROCESS LIVE CANDLES
+  // ------------------------------------------------------------
+
+  function processCandles(candles) {
+    const result =
+      analyzeMarket(candles);
+
+    return formatResult(result);
+  }
+
+  // ------------------------------------------------------------
+  // BROWSER EXPORT
+  // ------------------------------------------------------------
+
+  if (typeof window !== "undefined") {
+    window.SHIV_AI_TRADING = {
+      analyzeMarket,
+      processCandles,
+      generateTestCandles,
+      runTest,
+      formatResult
     };
   }
 
-  if (fastEMA < slowEMA) {
-    return {
-      name: "EMA Trend",
-      signal: "SELL",
-      reason: "9 EMA below 21 EMA",
-      fastEMA,
-      slowEMA
+  // ------------------------------------------------------------
+  // NODE EXPORT
+  // ------------------------------------------------------------
+
+  if (
+    typeof module !== "undefined" &&
+    module.exports
+  ) {
+    module.exports = {
+      analyzeMarket,
+      processCandles,
+      generateTestCandles,
+      runTest,
+      formatResult
     };
   }
 
-  return {
-    name: "EMA Trend",
-    signal: "WAIT",
-    reason: "EMA crossover not confirmed"
-  };
-}
+  // ------------------------------------------------------------
+  // READY MESSAGE
+  // ------------------------------------------------------------
 
+  if (typeof window !== "undefined") {
+    console.log(
+      "SHIV AI Trading App loaded."
+    );
 
-/* =========================
-   STRATEGY 2
-   RSI MOMENTUM
-========================= */
-
-function strategyRSI(closes) {
-
-  const rsi = calculateRSI(
-    closes,
-    SETTINGS.rsiPeriod
-  );
-
-  if (rsi === null) {
-    return {
-      name: "RSI Momentum",
-      signal: "WAIT",
-      reason: "Not enough data"
-    };
+    console.log(
+      "Master strategy:",
+      getEngine()
+        ? "CONNECTED"
+        : "NOT LOADED"
+    );
   }
 
-  if (rsi >= SETTINGS.rsiBuyLevel && rsi < 70) {
-    return {
-      name: "RSI Momentum",
-      signal: "BUY",
-      reason: `RSI momentum positive`,
-      rsi
-    };
-  }
-
-  if (rsi <= SETTINGS.rsiSellLevel && rsi > 30) {
-    return {
-      name: "RSI Momentum",
-      signal: "SELL",
-      reason: `RSI momentum negative`,
-      rsi
-    };
-  }
-
-  return {
-    name: "RSI Momentum",
-    signal: "WAIT",
-    reason: "RSI neutral",
-    rsi
-  };
-}
-
-
-/* =========================
-   STRATEGY 3
-   VWAP + VOLUME
-========================= */
-
-function strategyVWAP(candles) {
-
-  if (!candles || candles.length < 5) {
-    return {
-      name: "VWAP + Volume",
-      signal: "WAIT",
-      reason: "Not enough data"
-    };
-  }
-
-  let cumulativePriceVolume = 0;
-  let cumulativeVolume = 0;
-
-  for (const candle of candles) {
-
-    const typicalPrice =
-      (candle.high + candle.low + candle.close) / 3;
-
-    cumulativePriceVolume +=
-      typicalPrice * candle.volume;
-
-    cumulativeVolume += candle.volume;
-  }
-
-  if (cumulativeVolume === 0) {
-    return {
-      name: "VWAP + Volume",
-      signal: "WAIT",
-      reason: "Volume unavailable"
-    };
-  }
-
-  const vwap =
-    cumulativePriceVolume / cumulativeVolume;
-
-  const latest = candles[candles.length - 1];
-
-  const recentVolumes =
-    candles.slice(-6, -1).map(c => c.volume);
-
-  const averageVolume =
-    average(recentVolumes);
-
-  const strongVolume =
-    latest.volume >=
-    averageVolume * SETTINGS.volumeMultiplier;
-
-  if (latest.close > vwap && strongVolume) {
-    return {
-      name: "VWAP + Volume",
-      signal: "BUY",
-      reason: "Price above VWAP with strong volume",
-      vwap,
-      volume: latest.volume
-    };
-  }
-
-  if (latest.close < vwap && strongVolume) {
-    return {
-      name: "VWAP + Volume",
-      signal: "SELL",
-      reason: "Price below VWAP with strong volume",
-      vwap,
-      volume: latest.volume
-    };
-  }
-
-  return {
-    name: "VWAP + Volume",
-    signal: "WAIT",
-    reason: "VWAP/volume confirmation missing",
-    vwap
-  };
-}
-
-
-/* =========================
-   CONSENSUS ENGINE
-========================= */
-
-function getConsensus(results) {
-
-  const buyCount =
-    results.filter(r => r.signal === "BUY").length;
-
-  const sellCount =
-    results.filter(r => r.signal === "SELL").length;
-
-  if (buyCount >= SETTINGS.minimumAgreement) {
-
-    return {
-      signal: "BUY",
-      agreement: buyCount,
-      confidence: Math.round(
-        (buyCount / results.length) * 100
-      )
-    };
-  }
-
-  if (sellCount >= SETTINGS.minimumAgreement) {
-
-    return {
-      signal: "SELL",
-      agreement: sellCount,
-      confidence: Math.round(
-        (sellCount / results.length) * 100
-      )
-    };
-  }
-
-  return {
-    signal: "NO TRADE",
-    agreement: Math.max(
-      buyCount,
-      sellCount
-    ),
-    confidence: 0
-  };
-}
-
-
-/* =========================
-   MAIN ANALYSIS
-========================= */
-
-function analyzeMarket(candles) {
-
-  if (!candles || candles.length < 30) {
-
-    return {
-      signal: "NO TRADE",
-      reason: "Waiting for sufficient market data",
-      strategies: []
-    };
-  }
-
-  const closes =
-    candles.map(c => Number(c.close));
-
-  const emaResult =
-    strategyEMA(closes);
-
-  const rsiResult =
-    strategyRSI(closes);
-
-  const vwapResult =
-    strategyVWAP(candles);
-
-  const strategies = [
-    emaResult,
-    rsiResult,
-    vwapResult
-  ];
-
-  const consensus =
-    getConsensus(strategies);
-
-  return {
-    signal: consensus.signal,
-    agreement: consensus.agreement,
-    confidence: consensus.confidence,
-    strategies
-  };
-}
-
-
-/* =========================
-   EXAMPLE TEST DATA
-========================= */
-
-function generateTestCandles() {
-
-  const candles = [];
-
-  let price = 25000;
-
-  for (let i = 0; i < 60; i++) {
-
-    const change =
-      (Math.random() - 0.45) * 40;
-
-    const open = price;
-
-    const close =
-      price + change;
-
-    const high =
-      Math.max(open, close) +
-      Math.random() * 20;
-
-    const low =
-      Math.min(open, close) -
-      Math.random() * 20;
-
-    const volume =
-      100000 +
-      Math.random() * 50000;
-
-    candles.push({
-      open,
-      high,
-      low,
-      close,
-      volume
-    });
-
-    price = close;
-  }
-
-  return candles;
-}
-
-
-/* =========================
-   TEST ENGINE
-========================= */
-
-function runTest() {
-
-  const candles =
-    generateTestCandles();
-
-  const result =
-    analyzeMarket(candles);
-
-  console.log(
-    "========== SHIV AI TRADING =========="
-  );
-
-  console.log(
-    "FINAL SIGNAL:",
-    result.signal
-  );
-
-  console.log(
-    "AGREEMENT:",
-    result.agreement
-  );
-
-  console.log(
-    "CONFIDENCE:",
-    result.confidence + "%"
-  );
-
-  console.log(
-    "STRATEGIES:",
-    result.strategies
-  );
-
-  return result;
-}
-
-
-/* =========================
-   EXPORT FOR BROWSER
-========================= */
-
-window.SHIV_AI_TRADING = {
-
-  analyzeMarket,
-  strategyEMA,
-  strategyRSI,
-  strategyVWAP,
-  getConsensus,
-  runTest
-
-};
-
-console.log(
-  "SHIV AI Trading Engine Loaded"
-);
+})();
