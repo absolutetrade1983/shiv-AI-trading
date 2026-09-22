@@ -1,779 +1,1303 @@
 // ============================================================
-// NIFTY AI TRADING ENGINE
-// 5-minute strategy engine
+// SHIV AI TRADING - MASTER STRATEGY ENGINE
+// NIFTY | 5 MIN
+// HH HL LH LL + BOS + CHOCH + FVG + LIQUIDITY
+// FIB GOLDEN ZONE + PRICE RANGE + EMA + RSI + VWAP + VOLUME
 // ============================================================
 
-// Candle format:
-// {
-//   open: Number,
-//   high: Number,
-//   low: Number,
-//   close: Number,
-//   volume: Number
-// }
+const SETTINGS = {
+  market: "NIFTY",
+  timeframe: "5m",
 
+  minimumScore: 7,
+  minimumAgreement: 3,
 
-// =========================
+  emaFast: 9,
+  emaSlow: 21,
+  rsiPeriod: 14,
+
+  volumePeriod: 20,
+  volumeMultiplier: 1.5,
+
+  liquidityLookback: 20,
+  rangeLookback: 20,
+  atrPeriod: 14,
+
+  stopATR: 1.5,
+  targetATR: 3,
+
+  swingStrength: 2
+};
+
+// ============================================================
 // BASIC HELPERS
-// =========================
+// ============================================================
 
-function last(arr, n = 1) {
-    return arr[arr.length - n];
+function last(arr) {
+  return arr && arr.length ? arr[arr.length - 1] : null;
+}
+
+function number(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
 function average(arr) {
-    if (!arr.length) return 0;
-    return arr.reduce((a, b) => a + b, 0) / arr.length;
+  if (!arr.length) return 0;
+  return arr.reduce((a, b) => a + b, 0) / arr.length;
 }
 
+function normalizeCandles(candles) {
+  return (candles || [])
+    .map(c => ({
+      time: c.time ?? c.timestamp ?? null,
+      open: number(c.open),
+      high: number(c.high),
+      low: number(c.low),
+      close: number(c.close),
+      volume: number(c.volume)
+    }))
+    .filter(c => c.high >= c.low && c.close > 0);
+}
 
-// =========================
+// ============================================================
 // EMA
-// =========================
+// ============================================================
 
 function calculateEMA(candles, period) {
-    if (candles.length < period) return null;
+  const data = normalizeCandles(candles);
 
-    const closes = candles.map(c => c.close);
-    const multiplier = 2 / (period + 1);
+  if (data.length < period) return null;
 
-    let ema = average(closes.slice(0, period));
+  const closes = data.map(c => c.close);
 
-    for (let i = period; i < closes.length; i++) {
-        ema = ((closes[i] - ema) * multiplier) + ema;
-    }
+  let ema = average(closes.slice(0, period));
 
-    return ema;
+  const multiplier = 2 / (period + 1);
+
+  for (let i = period; i < closes.length; i++) {
+    ema = (closes[i] - ema) * multiplier + ema;
+  }
+
+  return ema;
 }
 
-
-// =========================
+// ============================================================
 // RSI
-// =========================
+// ============================================================
 
 function calculateRSI(candles, period = 14) {
-    if (candles.length <= period) return null;
+  const data = normalizeCandles(candles);
 
-    let gains = 0;
-    let losses = 0;
+  if (data.length < period + 1) return 50;
 
-    for (let i = candles.length - period; i < candles.length; i++) {
-        const change =
-            candles[i].close - candles[i - 1].close;
+  let gains = 0;
+  let losses = 0;
 
-        if (change > 0) gains += change;
-        else losses += Math.abs(change);
-    }
+  for (let i = 1; i <= period; i++) {
+    const change = data[i].close - data[i - 1].close;
 
-    if (losses === 0) return 100;
+    if (change > 0) gains += change;
+    else losses += Math.abs(change);
+  }
 
-    const rs = gains / losses;
+  let avgGain = gains / period;
+  let avgLoss = losses / period;
 
-    return 100 - (100 / (1 + rs));
+  for (let i = period + 1; i < data.length; i++) {
+    const change = data[i].close - data[i - 1].close;
+
+    const gain = Math.max(change, 0);
+    const loss = Math.max(-change, 0);
+
+    avgGain = ((avgGain * (period - 1)) + gain) / period;
+    avgLoss = ((avgLoss * (period - 1)) + loss) / period;
+  }
+
+  if (avgLoss === 0) {
+    return avgGain > 0 ? 100 : 50;
+  }
+
+  const rs = avgGain / avgLoss;
+
+  return 100 - (100 / (1 + rs));
 }
 
-
-// =========================
+// ============================================================
 // ATR
-// =========================
+// ============================================================
 
 function calculateATR(candles, period = 14) {
-    if (candles.length <= period) return null;
+  const data = normalizeCandles(candles);
 
-    const trs = [];
+  if (data.length < period + 1) return 0;
 
-    for (let i = 1; i < candles.length; i++) {
-        const current = candles[i];
-        const previous = candles[i - 1];
+  const trs = [];
 
-        const tr = Math.max(
-            current.high - current.low,
-            Math.abs(current.high - previous.close),
-            Math.abs(current.low - previous.close)
-        );
+  for (let i = 1; i < data.length; i++) {
+    const current = data[i];
+    const previous = data[i - 1];
 
-        trs.push(tr);
-    }
+    const tr = Math.max(
+      current.high - current.low,
+      Math.abs(current.high - previous.close),
+      Math.abs(current.low - previous.close)
+    );
 
-    return average(trs.slice(-period));
+    trs.push(tr);
+  }
+
+  return average(trs.slice(-period));
 }
 
-
-// =========================
+// ============================================================
 // VWAP
-// =========================
+// ============================================================
 
 function calculateVWAP(candles) {
-    if (!candles.length) return null;
+  const data = normalizeCandles(candles);
 
-    let totalPV = 0;
-    let totalVolume = 0;
+  if (!data.length) return 0;
 
-    candles.forEach(c => {
-        const typicalPrice =
-            (c.high + c.low + c.close) / 3;
+  let cumulativePV = 0;
+  let cumulativeVolume = 0;
 
-        totalPV += typicalPrice * c.volume;
-        totalVolume += c.volume;
-    });
+  for (const candle of data) {
+    const typicalPrice =
+      (candle.high + candle.low + candle.close) / 3;
 
-    if (!totalVolume) return null;
+    cumulativePV += typicalPrice * candle.volume;
+    cumulativeVolume += candle.volume;
+  }
 
-    return totalPV / totalVolume;
+  if (cumulativeVolume === 0) {
+    return last(data).close;
+  }
+
+  return cumulativePV / cumulativeVolume;
 }
 
-
-// =========================
-// SWING HIGH / LOW
-// =========================
+// ============================================================
+// SWING POINTS
+// ============================================================
 
 function findSwingPoints(candles, strength = 2) {
+  const data = normalizeCandles(candles);
 
-    const highs = [];
-    const lows = [];
+  const highs = [];
+  const lows = [];
 
-    for (
-        let i = strength;
-        i < candles.length - strength;
-        i++
-    ) {
+  for (let i = strength; i < data.length - strength; i++) {
+    let swingHigh = true;
+    let swingLow = true;
 
-        let swingHigh = true;
-        let swingLow = true;
+    for (let j = 1; j <= strength; j++) {
+      if (
+        data[i].high <= data[i - j].high ||
+        data[i].high <= data[i + j].high
+      ) {
+        swingHigh = false;
+      }
 
-        for (let j = 1; j <= strength; j++) {
-
-            if (
-                candles[i].high <= candles[i - j].high ||
-                candles[i].high <= candles[i + j].high
-            ) {
-                swingHigh = false;
-            }
-
-            if (
-                candles[i].low >= candles[i - j].low ||
-                candles[i].low >= candles[i + j].low
-            ) {
-                swingLow = false;
-            }
-        }
-
-        if (swingHigh) {
-            highs.push({
-                index: i,
-                price: candles[i].high
-            });
-        }
-
-        if (swingLow) {
-            lows.push({
-                index: i,
-                price: candles[i].low
-            });
-        }
+      if (
+        data[i].low >= data[i - j].low ||
+        data[i].low >= data[i + j].low
+      ) {
+        swingLow = false;
+      }
     }
 
-    return { highs, lows };
+    if (swingHigh) {
+      highs.push({
+        index: i,
+        price: data[i].high
+      });
+    }
+
+    if (swingLow) {
+      lows.push({
+        index: i,
+        price: data[i].low
+      });
+    }
+  }
+
+  return { highs, lows };
 }
 
-
-// =========================
+// ============================================================
+// MARKET STRUCTURE
 // HH / HL / LH / LL
-// =========================
+// ============================================================
 
-function marketStructure(candles) {
+function detectMarketStructure(candles) {
+  const data = normalizeCandles(candles);
 
-    const swings = findSwingPoints(candles);
+  const swings = findSwingPoints(
+    data,
+    SETTINGS.swingStrength
+  );
 
-    const highs = swings.highs;
-    const lows = swings.lows;
+  let structure = "NEUTRAL";
+  let bullish = 0;
+  let bearish = 0;
 
-    let signal = "NEUTRAL";
-    let structure = [];
+  let lastHH = null;
+  let lastHL = null;
+  let lastLH = null;
+  let lastLL = null;
 
-    if (highs.length >= 2) {
+  if (swings.highs.length >= 2) {
+    const h1 = swings.highs[swings.highs.length - 2];
+    const h2 = swings.highs[swings.highs.length - 1];
 
-        const h1 = highs[highs.length - 2].price;
-        const h2 = highs[highs.length - 1].price;
-
-        structure.push(
-            h2 > h1 ? "HH" : "LH"
-        );
+    if (h2.price > h1.price) {
+      lastHH = h2.price;
+      bullish++;
+    } else if (h2.price < h1.price) {
+      lastLH = h2.price;
+      bearish++;
     }
+  }
 
-    if (lows.length >= 2) {
+  if (swings.lows.length >= 2) {
+    const l1 = swings.lows[swings.lows.length - 2];
+    const l2 = swings.lows[swings.lows.length - 1];
 
-        const l1 = lows[lows.length - 2].price;
-        const l2 = lows[lows.length - 1].price;
-
-        structure.push(
-            l2 > l1 ? "HL" : "LL"
-        );
+    if (l2.price > l1.price) {
+      lastHL = l2.price;
+      bullish++;
+    } else if (l2.price < l1.price) {
+      lastLL = l2.price;
+      bearish++;
     }
+  }
 
-    const bullish =
-        structure.includes("HH") &&
-        structure.includes("HL");
+  if (bullish >= 2) structure = "BULLISH";
+  else if (bearish >= 2) structure = "BEARISH";
 
-    const bearish =
-        structure.includes("LH") &&
-        structure.includes("LL");
-
-    if (bullish) signal = "BUY";
-    if (bearish) signal = "SELL";
-
-    return {
-        signal,
-        structure,
-        swings
-    };
+  return {
+    structure,
+    bullish,
+    bearish,
+    HH: lastHH,
+    HL: lastHL,
+    LH: lastLH,
+    LL: lastLL,
+    swings
+  };
 }
 
-
-// =========================
+// ============================================================
 // BOS
-// =========================
+// ============================================================
 
-function detectBOS(candles) {
+function detectBOS(candles, structure) {
+  const data = normalizeCandles(candles);
 
-    if (candles.length < 10) {
-        return "NONE";
-    }
+  if (data.length < 3) {
+    return {
+      signal: "NONE",
+      direction: null
+    };
+  }
 
-    const current = last(candles);
+  const current = last(data);
 
-    const previousHigh = Math.max(
-        ...candles
-            .slice(-8, -1)
-            .map(c => c.high)
-    );
+  const previous = data.slice(
+    0,
+    Math.max(0, data.length - 1)
+  );
 
-    const previousLow = Math.min(
-        ...candles
-            .slice(-8, -1)
-            .map(c => c.low)
-    );
+  const recentHigh = Math.max(
+    ...previous.slice(-20).map(c => c.high)
+  );
 
-    if (current.close > previousHigh) {
-        return "BULLISH_BOS";
-    }
+  const recentLow = Math.min(
+    ...previous.slice(-20).map(c => c.low)
+  );
 
-    if (current.close < previousLow) {
-        return "BEARISH_BOS";
-    }
+  if (
+    current.close > recentHigh &&
+    structure.structure !== "BEARISH"
+  ) {
+    return {
+      signal: "BULLISH_BOS",
+      direction: "BUY"
+    };
+  }
 
-    return "NONE";
+  if (
+    current.close < recentLow &&
+    structure.structure !== "BULLISH"
+  ) {
+    return {
+      signal: "BEARISH_BOS",
+      direction: "SELL"
+    };
+  }
+
+  return {
+    signal: "NONE",
+    direction: null
+  };
 }
 
-
-// =========================
+// ============================================================
 // CHOCH
-// =========================
+// ============================================================
 
-function detectCHOCH(candles) {
+function detectCHOCH(candles, structure) {
+  const data = normalizeCandles(candles);
 
-    const structure = marketStructure(candles);
+  if (data.length < 10) {
+    return {
+      signal: "NONE",
+      direction: null
+    };
+  }
 
-    if (structure.structure.includes("HH") &&
-        structure.structure.includes("LL")) {
-        return "POSSIBLE_BEARISH_CHOCH";
-    }
+  const current = last(data);
 
-    if (structure.structure.includes("LH") &&
-        structure.structure.includes("HL")) {
-        return "POSSIBLE_BULLISH_CHOCH";
-    }
+  const recent = data.slice(-10, -1);
 
-    return "NONE";
+  const high = Math.max(...recent.map(c => c.high));
+  const low = Math.min(...recent.map(c => c.low));
+
+  if (
+    structure.structure === "BEARISH" &&
+    current.close > high
+  ) {
+    return {
+      signal: "BULLISH_CHOCH",
+      direction: "BUY"
+    };
+  }
+
+  if (
+    structure.structure === "BULLISH" &&
+    current.close < low
+  ) {
+    return {
+      signal: "BEARISH_CHOCH",
+      direction: "SELL"
+    };
+  }
+
+  return {
+    signal: "NONE",
+    direction: null
+  };
 }
 
-
-// =========================
+// ============================================================
 // FAIR VALUE GAP
-// =========================
+// ============================================================
 
 function detectFVG(candles) {
+  const data = normalizeCandles(candles);
 
-    if (candles.length < 3) {
-        return { type: "NONE" };
-    }
-
-    const a = candles[candles.length - 3];
-    const b = candles[candles.length - 2];
-    const c = candles[candles.length - 1];
-
-    // Bullish FVG
-    if (c.low > a.high) {
-
-        return {
-            type: "BULLISH_FVG",
-            low: a.high,
-            high: c.low
-        };
-    }
-
-    // Bearish FVG
-    if (c.high < a.low) {
-
-        return {
-            type: "BEARISH_FVG",
-            low: c.high,
-            high: a.low
-        };
-    }
-
+  if (data.length < 3) {
     return {
-        type: "NONE"
+      signal: "NONE",
+      direction: null,
+      gap: null
     };
+  }
+
+  const a = data[data.length - 3];
+  const b = data[data.length - 2];
+  const c = data[data.length - 1];
+
+  // Bullish FVG
+  if (c.low > a.high) {
+    return {
+      signal: "BULLISH_FVG",
+      direction: "BUY",
+      gap: {
+        low: a.high,
+        high: c.low
+      }
+    };
+  }
+
+  // Bearish FVG
+  if (c.high < a.low) {
+    return {
+      signal: "BEARISH_FVG",
+      direction: "SELL",
+      gap: {
+        low: c.high,
+        high: a.low
+      }
+    };
+  }
+
+  return {
+    signal: "NONE",
+    direction: null,
+    gap: null
+  };
 }
 
-
-// =========================
-// LIQUIDITY ZONES
-// =========================
+// ============================================================
+// LIQUIDITY SWEEP
+// IMPORTANT: CURRENT CANDLE EXCLUDED
+// ============================================================
 
 function detectLiquidity(candles) {
+  const data = normalizeCandles(candles);
 
-    const recent = candles.slice(-20);
-
-    const highs = recent.map(c => c.high);
-    const lows = recent.map(c => c.low);
-
-    const liquidityHigh = Math.max(...highs);
-    const liquidityLow = Math.min(...lows);
-
-    const current = last(candles);
-
-    if (current.high > liquidityHigh &&
-        current.close < liquidityHigh) {
-
-        return "BUY_SIDE_LIQUIDITY_SWEEP";
-    }
-
-    if (current.low < liquidityLow &&
-        current.close > liquidityLow) {
-
-        return "SELL_SIDE_LIQUIDITY_SWEEP";
-    }
-
-    return "NONE";
-}
-
-
-// =========================
-// FIBONACCI GOLDEN ZONE
-// =========================
-
-function fibonacciZone(candles) {
-
-    const swings = findSwingPoints(candles);
-
-    if (!swings.highs.length ||
-        !swings.lows.length) {
-
-        return {
-            zone: "NONE"
-        };
-    }
-
-    const high =
-        swings.highs[swings.highs.length - 1].price;
-
-    const low =
-        swings.lows[swings.lows.length - 1].price;
-
-    const range = high - low;
-
-    if (range <= 0) {
-        return { zone: "NONE" };
-    }
-
-    const fib618 = high - range * 0.618;
-    const fib786 = high - range * 0.786;
-
-    const price = last(candles).close;
-
-    if (price <= fib618 && price >= fib786) {
-
-        return {
-            zone: "GOLDEN_ZONE",
-            fib618,
-            fib786
-        };
-    }
-
+  if (data.length < SETTINGS.liquidityLookback + 1) {
     return {
-        zone: "OUTSIDE"
+      signal: "NONE",
+      direction: null
     };
+  }
+
+  const current = last(data);
+
+  const previous = data.slice(
+    -(SETTINGS.liquidityLookback + 1),
+    -1
+  );
+
+  const liquidityHigh = Math.max(
+    ...previous.map(c => c.high)
+  );
+
+  const liquidityLow = Math.min(
+    ...previous.map(c => c.low)
+  );
+
+  // Sell-side liquidity swept
+  // Price breaks below low and closes back above it
+  if (
+    current.low < liquidityLow &&
+    current.close > liquidityLow
+  ) {
+    return {
+      signal: "SELL_SIDE_LIQUIDITY_SWEEP",
+      direction: "BUY",
+      level: liquidityLow
+    };
+  }
+
+  // Buy-side liquidity swept
+  // Price breaks above high and closes back below it
+  if (
+    current.high > liquidityHigh &&
+    current.close < liquidityHigh
+  ) {
+    return {
+      signal: "BUY_SIDE_LIQUIDITY_SWEEP",
+      direction: "SELL",
+      level: liquidityHigh
+    };
+  }
+
+  return {
+    signal: "NONE",
+    direction: null
+  };
 }
 
+// ============================================================
+// FIBONACCI GOLDEN ZONE
+// 0.618 - 0.786
+// ============================================================
 
-// =========================
+function fibonacciZone(candles, structureData) {
+  const data = normalizeCandles(candles);
+  const swings = structureData.swings;
+
+  if (
+    !swings.highs.length ||
+    !swings.lows.length
+  ) {
+    return {
+      signal: "NONE",
+      direction: null
+    };
+  }
+
+  const high =
+    swings.highs[swings.highs.length - 1];
+
+  const low =
+    swings.lows[swings.lows.length - 1];
+
+  const current = last(data).close;
+
+  let top;
+  let bottom;
+  let direction;
+
+  if (low.index < high.index) {
+    // Bullish leg
+    const range = high.price - low.price;
+
+    top = high.price - range * 0.618;
+    bottom = high.price - range * 0.786;
+
+    direction = "BUY";
+  } else {
+    // Bearish leg
+    const range = high.price - low.price;
+
+    top = low.price + range * 0.786;
+    bottom = low.price + range * 0.618;
+
+    direction = "SELL";
+  }
+
+  const inZone =
+    current >= Math.min(bottom, top) &&
+    current <= Math.max(bottom, top);
+
+  if (!inZone) {
+    return {
+      signal: "NONE",
+      direction: null,
+      zone: {
+        top,
+        bottom
+      }
+    };
+  }
+
+  return {
+    signal:
+      direction === "BUY"
+        ? "BULLISH_GOLDEN_ZONE"
+        : "BEARISH_GOLDEN_ZONE",
+    direction,
+    zone: {
+      top,
+      bottom
+    }
+  };
+}
+
+// ============================================================
 // PRICE RANGE
-// =========================
+// CURRENT CANDLE EXCLUDED
+// ============================================================
 
-function priceRange(candles, period = 20) {
+function priceRange(candles) {
+  const data = normalizeCandles(candles);
 
-    const data = candles.slice(-period);
+  if (data.length < SETTINGS.rangeLookback + 1) {
+    return {
+      signal: "NONE",
+      direction: null
+    };
+  }
 
-    const high = Math.max(
-        ...data.map(c => c.high)
-    );
+  const current = last(data);
 
-    const low = Math.min(
-        ...data.map(c => c.low)
-    );
+  const previous = data.slice(
+    -(SETTINGS.rangeLookback + 1),
+    -1
+  );
 
-    const current = last(candles).close;
+  const high = Math.max(
+    ...previous.map(c => c.high)
+  );
 
-    if (current > high) {
-        return "BREAKOUT";
-    }
+  const low = Math.min(
+    ...previous.map(c => c.low)
+  );
 
-    if (current < low) {
-        return "BREAKDOWN";
-    }
+  if (current.close > high) {
+    return {
+      signal: "RANGE_BREAKOUT",
+      direction: "BUY",
+      high,
+      low
+    };
+  }
 
-    return "RANGE";
+  if (current.close < low) {
+    return {
+      signal: "RANGE_BREAKDOWN",
+      direction: "SELL",
+      high,
+      low
+    };
+  }
+
+  return {
+    signal: "RANGE",
+    direction: null,
+    high,
+    low
+  };
 }
 
+// ============================================================
+// VOLUME
+// ============================================================
 
-// =========================
-// VOLUME CONFIRMATION
-// =========================
+function volumeSignal(candles) {
+  const data = normalizeCandles(candles);
 
-function volumeSignal(candles, period = 20) {
+  if (data.length < SETTINGS.volumePeriod + 1) {
+    return {
+      signal: "NORMAL",
+      direction: null
+    };
+  }
 
-    if (candles.length < period + 1) {
-        return "NONE";
+  const current = last(data);
+
+  const previous = data.slice(
+    -(SETTINGS.volumePeriod + 1),
+    -1
+  );
+
+  const avgVolume = average(
+    previous.map(c => c.volume)
+  );
+
+  if (
+    avgVolume > 0 &&
+    current.volume >=
+      avgVolume * SETTINGS.volumeMultiplier
+  ) {
+    if (current.close > current.open) {
+      return {
+        signal: "HIGH_VOLUME_BULLISH",
+        direction: "BUY"
+      };
     }
 
-    const volumes = candles
-        .slice(-(period + 1), -1)
-        .map(c => c.volume);
-
-    const avgVolume = average(volumes);
-
-    const currentVolume = last(candles).volume;
-
-    if (currentVolume > avgVolume * 1.5) {
-        return "HIGH_VOLUME";
+    if (current.close < current.open) {
+      return {
+        signal: "HIGH_VOLUME_BEARISH",
+        direction: "SELL"
+      };
     }
+  }
 
-    return "NORMAL_VOLUME";
+  return {
+    signal: "NORMAL",
+    direction: null
+  };
 }
 
-
-// =========================
-// TREND FILTER
-// =========================
+// ============================================================
+// TREND
+// ============================================================
 
 function trendFilter(candles) {
+  const data = normalizeCandles(candles);
 
-    const ema9 = calculateEMA(candles, 9);
-    const ema21 = calculateEMA(candles, 21);
+  const fastEMA = calculateEMA(
+    data,
+    SETTINGS.emaFast
+  );
 
-    if (!ema9 || !ema21) {
-        return "UNKNOWN";
-    }
+  const slowEMA = calculateEMA(
+    data,
+    SETTINGS.emaSlow
+  );
 
-    if (ema9 > ema21) return "BULLISH";
-    if (ema9 < ema21) return "BEARISH";
+  const current = last(data);
 
-    return "SIDEWAYS";
+  if (
+    fastEMA === null ||
+    slowEMA === null ||
+    !current
+  ) {
+    return {
+      trend: "NEUTRAL",
+      direction: null,
+      fastEMA,
+      slowEMA
+    };
+  }
+
+  if (
+    fastEMA > slowEMA &&
+    current.close > fastEMA
+  ) {
+    return {
+      trend: "BULLISH",
+      direction: "BUY",
+      fastEMA,
+      slowEMA
+    };
+  }
+
+  if (
+    fastEMA < slowEMA &&
+    current.close < fastEMA
+  ) {
+    return {
+      trend: "BEARISH",
+      direction: "SELL",
+      fastEMA,
+      slowEMA
+    };
+  }
+
+  return {
+    trend: "NEUTRAL",
+    direction: null,
+    fastEMA,
+    slowEMA
+  };
 }
 
+// ============================================================
+// UNIQUE STRATEGY AGREEMENT
+// ============================================================
 
-// =========================
-// MASTER AI SCORE
-// =========================
+function countAgreement(votes, direction) {
+  const names = new Set();
+
+  for (const vote of votes) {
+    if (
+      vote.direction === direction &&
+      vote.strategy
+    ) {
+      names.add(vote.strategy);
+    }
+  }
+
+  return names.size;
+}
+
+// ============================================================
+// MASTER ANALYSIS
+// ============================================================
 
 function analyzeNifty(candles) {
+  const data = normalizeCandles(candles);
 
-    if (!candles || candles.length < 50) {
-
-        return {
-            signal: "WAIT",
-            confidence: 0,
-            reason: "Not enough candle data"
-        };
-    }
-
-    let buyScore = 0;
-    let sellScore = 0;
-
-    const reasons = [];
-
-    // Market structure
-    const structure = marketStructure(candles);
-
-    if (structure.structure.includes("HH")) {
-        buyScore++;
-        reasons.push("HH");
-    }
-
-    if (structure.structure.includes("HL")) {
-        buyScore++;
-        reasons.push("HL");
-    }
-
-    if (structure.structure.includes("LH")) {
-        sellScore++;
-        reasons.push("LH");
-    }
-
-    if (structure.structure.includes("LL")) {
-        sellScore++;
-        reasons.push("LL");
-    }
-
-
-    // BOS
-    const bos = detectBOS(candles);
-
-    if (bos === "BULLISH_BOS") {
-        buyScore += 2;
-        reasons.push("Bullish BOS");
-    }
-
-    if (bos === "BEARISH_BOS") {
-        sellScore += 2;
-        reasons.push("Bearish BOS");
-    }
-
-
-    // FVG
-    const fvg = detectFVG(candles);
-
-    if (fvg.type === "BULLISH_FVG") {
-        buyScore++;
-        reasons.push("Bullish FVG");
-    }
-
-    if (fvg.type === "BEARISH_FVG") {
-        sellScore++;
-        reasons.push("Bearish FVG");
-    }
-
-
-    // Liquidity
-    const liquidity = detectLiquidity(candles);
-
-    if (liquidity === "SELL_SIDE_LIQUIDITY_SWEEP") {
-        buyScore += 2;
-        reasons.push("Sell-side liquidity sweep");
-    }
-
-    if (liquidity === "BUY_SIDE_LIQUIDITY_SWEEP") {
-        sellScore += 2;
-        reasons.push("Buy-side liquidity sweep");
-    }
-
-
-    // Fibonacci
-    const fib = fibonacciZone(candles);
-
-    if (fib.zone === "GOLDEN_ZONE") {
-        buyScore++;
-        sellScore++;
-        reasons.push("Fib Golden Zone");
-    }
-
-
-    // Price range
-    const range = priceRange(candles);
-
-    if (range === "BREAKOUT") {
-        buyScore++;
-        reasons.push("Range breakout");
-    }
-
-    if (range === "BREAKDOWN") {
-        sellScore++;
-        reasons.push("Range breakdown");
-    }
-
-
-    // EMA
-    const trend = trendFilter(candles);
-
-    if (trend === "BULLISH") {
-        buyScore++;
-        reasons.push("EMA bullish");
-    }
-
-    if (trend === "BEARISH") {
-        sellScore++;
-        reasons.push("EMA bearish");
-    }
-
-
-    // RSI
-    const rsi = calculateRSI(candles);
-
-    if (rsi !== null) {
-
-        if (rsi >= 50 && rsi <= 70) {
-            buyScore++;
-            reasons.push("RSI bullish");
-        }
-
-        if (rsi >= 30 && rsi < 50) {
-            sellScore++;
-            reasons.push("RSI bearish");
-        }
-    }
-
-
-    // VWAP
-    const vwap = calculateVWAP(candles);
-    const price = last(candles).close;
-
-    if (vwap !== null) {
-
-        if (price > vwap) {
-            buyScore++;
-            reasons.push("Above VWAP");
-        }
-
-        if (price < vwap) {
-            sellScore++;
-            reasons.push("Below VWAP");
-        }
-    }
-
-
-    // Volume
-    const volume = volumeSignal(candles);
-
-    if (volume === "HIGH_VOLUME") {
-
-        if (buyScore > sellScore) {
-            buyScore++;
-            reasons.push("High volume");
-        }
-
-        if (sellScore > buyScore) {
-            sellScore++;
-            reasons.push("High volume");
-        }
-    }
-
-
-    // =========================
-    // FINAL DECISION
-    // =========================
-
-    const totalPossible = 15;
-
-    let signal = "WAIT";
-    let winningScore = Math.max(
-        buyScore,
-        sellScore
-    );
-
-    if (
-        buyScore >= 7 &&
-        buyScore > sellScore
-    ) {
-        signal = "BUY";
-    }
-
-    if (
-        sellScore >= 7 &&
-        sellScore > buyScore
-    ) {
-        signal = "SELL";
-    }
-
-
-    const confidence =
-        Math.min(
-            Math.round(
-                (winningScore / totalPossible) * 100
-            ),
-            100
-        );
-
-
-    // =========================
-    // SL / TARGET
-    // =========================
-
-    const atr = calculateATR(candles);
-
-    let stopLoss = null;
-    let target = null;
-
-    if (atr) {
-
-        if (signal === "BUY") {
-
-            stopLoss = price - (atr * 1.5);
-            target = price + (atr * 3);
-
-        }
-
-        if (signal === "SELL") {
-
-            stopLoss = price + (atr * 1.5);
-            target = price - (atr * 3);
-
-        }
-    }
-
-
+  if (data.length < 50) {
     return {
-
-        market: "NIFTY",
-        timeframe: "5m",
-
-        signal,
-
-        confidence,
-
-        buyScore,
-        sellScore,
-
-        entry: price,
-
-        stopLoss,
-        target,
-
-        trend,
-        rsi,
-        vwap,
-        atr,
-
-        marketStructure:
-            structure.structure,
-
-        bos,
-
-        choch:
-            detectCHOCH(candles),
-
-        fvg,
-
-        liquidity,
-
-        fibonacci:
-            fib,
-
-        priceRange:
-            range,
-
-        volume,
-
-        reasons
+      market: SETTINGS.market,
+      timeframe: SETTINGS.timeframe,
+      signal: "WAIT",
+      confidence: 0,
+      reason: "Not enough candle data"
     };
+  }
+
+  const current = last(data);
+  const entry = current.close;
+
+  let buyScore = 0;
+  let sellScore = 0;
+
+  const votes = [];
+  const reasons = [];
+
+  // ----------------------------------------------------------
+  // MARKET STRUCTURE
+  // ----------------------------------------------------------
+
+  const structure = detectMarketStructure(data);
+
+  if (structure.HH !== null) {
+    buyScore += 1;
+
+    votes.push({
+      strategy: "MARKET_STRUCTURE_HH",
+      direction: "BUY"
+    });
+
+    reasons.push("Higher High");
+  }
+
+  if (structure.HL !== null) {
+    buyScore += 1;
+
+    votes.push({
+      strategy: "MARKET_STRUCTURE_HL",
+      direction: "BUY"
+    });
+
+    reasons.push("Higher Low");
+  }
+
+  if (structure.LH !== null) {
+    sellScore += 1;
+
+    votes.push({
+      strategy: "MARKET_STRUCTURE_LH",
+      direction: "SELL"
+    });
+
+    reasons.push("Lower High");
+  }
+
+  if (structure.LL !== null) {
+    sellScore += 1;
+
+    votes.push({
+      strategy: "MARKET_STRUCTURE_LL",
+      direction: "SELL"
+    });
+
+    reasons.push("Lower Low");
+  }
+
+  // ----------------------------------------------------------
+  // BOS
+  // ----------------------------------------------------------
+
+  const bos = detectBOS(data, structure);
+
+  if (bos.direction === "BUY") {
+    buyScore += 2;
+
+    votes.push({
+      strategy: "BOS",
+      direction: "BUY"
+    });
+
+    reasons.push("Bullish BOS");
+  }
+
+  if (bos.direction === "SELL") {
+    sellScore += 2;
+
+    votes.push({
+      strategy: "BOS",
+      direction: "SELL"
+    });
+
+    reasons.push("Bearish BOS");
+  }
+
+  // ----------------------------------------------------------
+  // CHOCH
+  // ----------------------------------------------------------
+
+  const choch = detectCHOCH(data, structure);
+
+  if (choch.direction === "BUY") {
+    buyScore += 2;
+
+    votes.push({
+      strategy: "CHOCH",
+      direction: "BUY"
+    });
+
+    reasons.push("Bullish CHOCH");
+  }
+
+  if (choch.direction === "SELL") {
+    sellScore += 2;
+
+    votes.push({
+      strategy: "CHOCH",
+      direction: "SELL"
+    });
+
+    reasons.push("Bearish CHOCH");
+  }
+
+  // ----------------------------------------------------------
+  // FVG
+  // ----------------------------------------------------------
+
+  const fvg = detectFVG(data);
+
+  if (fvg.direction === "BUY") {
+    buyScore += 1;
+
+    votes.push({
+      strategy: "FVG",
+      direction: "BUY"
+    });
+
+    reasons.push("Bullish FVG");
+  }
+
+  if (fvg.direction === "SELL") {
+    sellScore += 1;
+
+    votes.push({
+      strategy: "FVG",
+      direction: "SELL"
+    });
+
+    reasons.push("Bearish FVG");
+  }
+
+  // ----------------------------------------------------------
+  // LIQUIDITY
+  // ----------------------------------------------------------
+
+  const liquidity = detectLiquidity(data);
+
+  if (liquidity.direction === "BUY") {
+    buyScore += 2;
+
+    votes.push({
+      strategy: "LIQUIDITY",
+      direction: "BUY"
+    });
+
+    reasons.push("Sell-side liquidity sweep");
+  }
+
+  if (liquidity.direction === "SELL") {
+    sellScore += 2;
+
+    votes.push({
+      strategy: "LIQUIDITY",
+      direction: "SELL"
+    });
+
+    reasons.push("Buy-side liquidity sweep");
+  }
+
+  // ----------------------------------------------------------
+  // FIBONACCI
+  // ----------------------------------------------------------
+
+  const fibonacci = fibonacciZone(
+    data,
+    structure
+  );
+
+  if (fibonacci.direction === "BUY") {
+    buyScore += 1;
+
+    votes.push({
+      strategy: "FIB_GOLDEN_ZONE",
+      direction: "BUY"
+    });
+
+    reasons.push("Price in bullish Fibonacci golden zone");
+  }
+
+  if (fibonacci.direction === "SELL") {
+    sellScore += 1;
+
+    votes.push({
+      strategy: "FIB_GOLDEN_ZONE",
+      direction: "SELL"
+    });
+
+    reasons.push("Price in bearish Fibonacci golden zone");
+  }
+
+  // ----------------------------------------------------------
+  // PRICE RANGE
+  // ----------------------------------------------------------
+
+  const range = priceRange(data);
+
+  if (range.direction === "BUY") {
+    buyScore += 1;
+
+    votes.push({
+      strategy: "PRICE_RANGE",
+      direction: "BUY"
+    });
+
+    reasons.push("Range breakout");
+  }
+
+  if (range.direction === "SELL") {
+    sellScore += 1;
+
+    votes.push({
+      strategy: "PRICE_RANGE",
+      direction: "SELL"
+    });
+
+    reasons.push("Range breakdown");
+  }
+
+  // ----------------------------------------------------------
+  // EMA TREND
+  // ----------------------------------------------------------
+
+  const trend = trendFilter(data);
+
+  if (trend.direction === "BUY") {
+    buyScore += 1;
+
+    votes.push({
+      strategy: "EMA_TREND",
+      direction: "BUY"
+    });
+
+    reasons.push("EMA bullish trend");
+  }
+
+  if (trend.direction === "SELL") {
+    sellScore += 1;
+
+    votes.push({
+      strategy: "EMA_TREND",
+      direction: "SELL"
+    });
+
+    reasons.push("EMA bearish trend");
+  }
+
+  // ----------------------------------------------------------
+  // RSI
+  // ----------------------------------------------------------
+
+  const rsi = calculateRSI(
+    data,
+    SETTINGS.rsiPeriod
+  );
+
+  if (rsi >= 50 && rsi <= 70) {
+    buyScore += 1;
+
+    votes.push({
+      strategy: "RSI",
+      direction: "BUY"
+    });
+
+    reasons.push("RSI bullish zone");
+  }
+
+  if (rsi >= 30 && rsi < 50) {
+    sellScore += 1;
+
+    votes.push({
+      strategy: "RSI",
+      direction: "SELL"
+    });
+
+    reasons.push("RSI bearish zone");
+  }
+
+  // ----------------------------------------------------------
+  // VWAP
+  // ----------------------------------------------------------
+
+  const vwap = calculateVWAP(data);
+
+  if (entry > vwap) {
+    buyScore += 1;
+
+    votes.push({
+      strategy: "VWAP",
+      direction: "BUY"
+    });
+
+    reasons.push("Price above VWAP");
+  }
+
+  if (entry < vwap) {
+    sellScore += 1;
+
+    votes.push({
+      strategy: "VWAP",
+      direction: "SELL"
+    });
+
+    reasons.push("Price below VWAP");
+  }
+
+  // ----------------------------------------------------------
+  // VOLUME
+  // ----------------------------------------------------------
+
+  const volume = volumeSignal(data);
+
+  if (volume.direction === "BUY") {
+    buyScore += 1;
+
+    votes.push({
+      strategy: "VOLUME",
+      direction: "BUY"
+    });
+
+    reasons.push("Bullish volume confirmation");
+  }
+
+  if (volume.direction === "SELL") {
+    sellScore += 1;
+
+    votes.push({
+      strategy: "VOLUME",
+      direction: "SELL"
+    });
+
+    reasons.push("Bearish volume confirmation");
+  }
+
+  // ==========================================================
+  // FINAL DECISION
+  // ==========================================================
+
+  let signal = "WAIT";
+
+  const buyAgreement =
+    countAgreement(votes, "BUY");
+
+  const sellAgreement =
+    countAgreement(votes, "SELL");
+
+  if (
+    buyScore >= SETTINGS.minimumScore &&
+    buyScore > sellScore &&
+    buyAgreement >= SETTINGS.minimumAgreement &&
+    buyScore - sellScore >= 2
+  ) {
+    signal = "BUY";
+  }
+
+  if (
+    sellScore >= SETTINGS.minimumScore &&
+    sellScore > buyScore &&
+    sellAgreement >= SETTINGS.minimumAgreement &&
+    sellScore - buyScore >= 2
+  ) {
+    signal = "SELL";
+  }
+
+  // ==========================================================
+  // ATR
+  // ==========================================================
+
+  const atr = calculateATR(
+    data,
+    SETTINGS.atrPeriod
+  );
+
+  let stopLoss = null;
+  let target = null;
+
+  if (signal === "BUY" && atr > 0) {
+    stopLoss =
+      entry - atr * SETTINGS.stopATR;
+
+    target =
+      entry + atr * SETTINGS.targetATR;
+  }
+
+  if (signal === "SELL" && atr > 0) {
+    stopLoss =
+      entry + atr * SETTINGS.stopATR;
+
+    target =
+      entry - atr * SETTINGS.targetATR;
+  }
+
+  // ==========================================================
+  // CONFIDENCE
+  // ==========================================================
+
+  const winningScore =
+    signal === "BUY"
+      ? buyScore
+      : signal === "SELL"
+        ? sellScore
+        : Math.max(buyScore, sellScore);
+
+  const confidence = Math.min(
+    100,
+    Math.round((winningScore / 15) * 100)
+  );
+
+  // ==========================================================
+  // RESULT
+  // ==========================================================
+
+  return {
+    market: SETTINGS.market,
+    timeframe: SETTINGS.timeframe,
+
+    signal,
+    confidence,
+
+    entry,
+
+    stopLoss,
+    target,
+
+    buyScore,
+    sellScore,
+
+    buyAgreement,
+    sellAgreement,
+
+    trend: trend.trend,
+
+    rsi,
+    vwap,
+    atr,
+
+    marketStructure: structure.structure,
+
+    bos: bos.signal,
+    choch: choch.signal,
+
+    fvg: fvg.signal,
+    liquidity: liquidity.signal,
+
+    fibonacci: fibonacci.signal,
+
+    priceRange: range.signal,
+
+    volume: volume.signal,
+
+    emaFast: trend.fastEMA,
+    emaSlow: trend.slowEMA,
+
+    reasons,
+
+    votes,
+
+    timestamp: new Date().toISOString()
+  };
 }
-// ================================
-// EXPORT MASTER STRATEGY ENGINE
-// ================================
 
-window.SHIV_AI_STRATEGY = {
-    analyzeNifty
-};
+// ============================================================
+// EXPORTS
+// ============================================================
 
-console.log("SHIV AI Strategy Engine Loaded");
+// Browser
+if (typeof window !== "undefined") {
+  window.SHIV_AI_STRATEGY = {
+    analyzeNifty,
+    calculateEMA,
+    calculateRSI,
+    calculateATR,
+    calculateVWAP,
+    detectMarketStructure,
+    detectBOS,
+    detectCHOCH,
+    detectFVG,
+    detectLiquidity,
+    fibonacciZone,
+    priceRange,
+    volumeSignal,
+    trendFilter
+  };
+}
+
+// Node.js
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    analyzeNifty,
+    calculateEMA,
+    calculateRSI,
+    calculateATR,
+    calculateVWAP,
+    detectMarketStructure,
+    detectBOS,
+    detectCHOCH,
+    detectFVG,
+    detectLiquidity,
+    fibonacciZone,
+    priceRange,
+    volumeSignal,
+    trendFilter
+  };
+}
