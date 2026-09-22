@@ -768,3 +768,12 @@ function analyzeNifty(candles) {
         reasons
     };
 }
+// ================================
+// EXPORT MASTER STRATEGY ENGINE
+// ================================
+
+window.SHIV_AI_STRATEGY = {
+    analyzeNifty
+};
+
+console.log("SHIV AI Strategy Engine Loaded");
