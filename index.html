@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SHIV AI Trading</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+    }
+
+    body {
+      background: #0b0f14;
+      color: white;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: auto;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 8px;
+      font-size: 30px;
+    }
+
+    .subtitle {
+      text-align: center;
+      color: #8b95a5;
+      margin-bottom: 25px;
+    }
+
+    .status {
+      background: #121923;
+      border: 1px solid #263241;
+      border-radius: 14px;
+      padding: 18px;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .status span {
+      color: #00d084;
+      font-weight: bold;
+    }
+
+    .card {
+      background: #121923;
+      border: 1px solid #263241;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    .card h2 {
+      margin-bottom: 12px;
+      font-size: 20px;
+    }
+
+    .strategy {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 13px;
+      background: #0d131b;
+      border-radius: 10px;
+      margin-top: 10px;
+    }
+
+    .neutral {
+      color: #8b95a5;
+    }
+
+    .waiting {
+      color: #ffc107;
+      font-weight: bold;
+    }
+
+    .signal {
+      text-align: center;
+      padding: 25px;
+      border-radius: 12px;
+      background: #0d131b;
+      margin-top: 15px;
+    }
+
+    .signal h3 {
+      font-size: 28px;
+      margin-bottom: 8px;
+    }
+
+    .no-trade {
+      color: #ffc107;
+    }
+
+    .info {
+      color: #8b95a5;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+
+<body>
+
+<div class="container">
+
+  <h1>SHIV AI TRADING</h1>
+  <p class="subtitle">Multi-Strategy Market Scanner</p>
+
+  <div class="status">
+    System Status:
+    <span>READY</span>
+  </div>
+
+  <div class="card">
+    <h2>Strategy Consensus</h2>
+
+    <div class="strategy">
+      <span>Strategy 1</span>
+      <span class="neutral">WAITING</span>
+    </div>
+
+    <div class="strategy">
+      <span>Strategy 2</span>
+      <span class="neutral">WAITING</span>
+    </div>
+
+    <div class="strategy">
+      <span>Strategy 3</span>
+      <span class="neutral">WAITING</span>
+    </div>
+
+  </div>
+
+  <div class="card">
+
+    <h2>AI Decision</h2>
+
+    <div class="signal">
+      <h3 class="no-trade">NO TRADE</h3>
+      <p>Waiting for strategy confirmation</p>
+    </div>
+
+    <p class="info">
+      Trade signal will be generated only when multiple strategies
+      confirm the same market direction.
+    </p>
+
+  </div>
+
+</div>
+
+</body>
+</html>
