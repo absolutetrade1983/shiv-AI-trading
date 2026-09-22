@@ -1,13 +1,12 @@
 // ============================================================
 // SHIV AI TRADING — MASTER APP CONTROLLER
-// NIFTY | 5 MIN
+// NIFTY | 5 MIN | LIVE ANGEL ONE DATA
 // ============================================================
 
 (function () {
     "use strict";
 
-    const ENGINE =
-        window.SHIV_AI_STRATEGY;
+    const ENGINE = window.SHIV_AI_STRATEGY;
 
     if (!ENGINE) {
         console.error("Strategy engine not loaded.");
@@ -17,103 +16,49 @@
     const state = {
         candles: [],
         analysis: null,
-        dataMode: "TEST",
+        dataMode: "OFFLINE",
         lastUpdate: null,
         busy: false
     };
 
     // ========================================================
-    // TEST CANDLE GENERATOR
-    // Used ONLY until real market API is connected.
-    // ========================================================
-
-    function generateTestCandles(count = 150) {
-        const candles = [];
-
-        let price = 25000;
-
-        for (let i = 0; i < count; i++) {
-            const open = price;
-
-            const movement =
-                (Math.random() - 0.48) * 90;
-
-            const close =
-                open + movement;
-
-            const high =
-                Math.max(open, close) +
-                Math.random() * 35;
-
-            const low =
-                Math.min(open, close) -
-                Math.random() * 35;
-
-            const volume =
-                Math.floor(
-                    50000 +
-                    Math.random() * 100000
-                );
-
-            candles.push({
-                time:
-                    Date.now() -
-                    (count - i) * 5 * 60 * 1000,
-
-                open,
-                high,
-                low,
-                close,
-                volume
-            });
-
-            price = close;
-        }
-
-        return candles;
-    }
-
-    // ========================================================
-    // REAL MARKET DATA ADAPTER
-    //
-    // Later this endpoint will be supplied by our backend.
-    // It must return:
-    //
-    // {
-    //   candles: [
-    //      {time, open, high, low, close, volume}
-    //   ]
-    // }
+    // REAL MARKET DATA
+    // Backend securely talks to Angel One.
+    // API credentials NEVER enter this browser code.
     // ========================================================
 
     async function getRealMarketData() {
-        const response =
-            await fetch("/api/nifty-candles", {
-                method: "GET",
-                cache: "no-store"
-            });
+        const response = await fetch("/api/nifty-candles", {
+            method: "GET",
+            cache: "no-store",
+            headers: {
+                "Accept": "application/json"
+            }
+        });
+
+        let data = null;
+
+        try {
+            data = await response.json();
+        } catch (e) {
+            throw new Error("Invalid response from market server");
+        }
 
         if (!response.ok) {
             throw new Error(
-                "Market data server unavailable"
+                data && data.error
+                    ? data.error
+                    : "Market data server unavailable"
             );
         }
 
-        const data =
-            await response.json();
-
-        if (
-            !data.candles ||
-            !Array.isArray(data.candles)
-        ) {
-            throw new Error(
-                "Invalid market data"
-            );
+        if (!data.candles || !Array.isArray(data.candles)) {
+            throw new Error("Invalid market candle data");
         }
 
         if (data.candles.length < 50) {
             throw new Error(
-                "Not enough market candles"
+                "Not enough NIFTY 5-minute candles received"
             );
         }
 
@@ -121,45 +66,23 @@
     }
 
     // ========================================================
-    // LOAD MARKET DATA
+    // LOAD LIVE MARKET DATA
     // ========================================================
 
     async function loadMarketData() {
-        try {
-            const candles =
-                await getRealMarketData();
+        const candles = await getRealMarketData();
 
-            state.candles = candles;
-            state.dataMode = "LIVE";
-            state.lastUpdate = new Date();
+        state.candles = candles;
+        state.dataMode = "LIVE";
+        state.lastUpdate = new Date();
 
-            return true;
+        renderDataSource();
 
-        } catch (error) {
-            console.warn(
-                "Live feed unavailable:",
-                error.message
-            );
-
-            /*
-             * IMPORTANT:
-             * We do NOT pretend this is live data.
-             * Until backend market feed exists,
-             * testing uses generated candles.
-             */
-
-            state.candles =
-                generateTestCandles(150);
-
-            state.dataMode = "TEST";
-            state.lastUpdate = new Date();
-
-            return false;
-        }
+        return true;
     }
 
     // ========================================================
-    // RUN ENGINE
+    // RUN AI ANALYSIS
     // ========================================================
 
     async function runAnalysis() {
@@ -167,24 +90,24 @@
 
         state.busy = true;
 
+        hideError();
         setButtonState(true);
-
-        setStatus(
-            "ANALYZING..."
-        );
+        setStatus("FETCHING LIVE NIFTY DATA...");
 
         try {
             await loadMarketData();
 
-            const result =
-                ENGINE.analyzeMarket(
-                    state.candles
-                );
+            setStatus("ANALYZING LIVE 5 MIN DATA...");
 
-            if (!result.success) {
+            const result = ENGINE.analyzeMarket(
+                state.candles
+            );
+
+            if (!result || !result.success) {
                 throw new Error(
-                    result.error ||
-                    "Analysis failed"
+                    result && result.error
+                        ? result.error
+                        : "Analysis failed"
                 );
             }
 
@@ -192,22 +115,17 @@
 
             renderAnalysis(result);
 
-            setStatus(
-                state.dataMode === "LIVE"
-                    ? "CONNECTED • LIVE DATA"
-                    : "CONNECTED • TEST DATA"
-            );
+            setStatus("CONNECTED • LIVE DATA");
 
         } catch (error) {
-            console.error(error);
+            console.error("Analysis error:", error);
 
-            setStatus(
-                "ERROR"
-            );
+            state.dataMode = "OFFLINE";
+            renderDataSource();
 
-            showError(
-                error.message
-            );
+            setStatus("ERROR");
+
+            showError(error.message);
 
         } finally {
             state.busy = false;
@@ -221,9 +139,7 @@
 
     function setStatus(text) {
         const el =
-            document.getElementById(
-                "engineStatus"
-            );
+            document.getElementById("engineStatus");
 
         if (el) {
             el.textContent = text;
@@ -232,9 +148,7 @@
 
     function setButtonState(busy) {
         const button =
-            document.getElementById(
-                "runAnalysis"
-            );
+            document.getElementById("runAnalysis");
 
         if (!button) return;
 
@@ -248,28 +162,22 @@
 
     function showError(message) {
         const el =
-            document.getElementById(
-                "errorBox"
-            );
+            document.getElementById("errorBox");
 
         if (el) {
             el.textContent =
                 "Error: " + message;
 
-            el.style.display =
-                "block";
+            el.style.display = "block";
         }
     }
 
     function hideError() {
         const el =
-            document.getElementById(
-                "errorBox"
-            );
+            document.getElementById("errorBox");
 
         if (el) {
-            el.style.display =
-                "none";
+            el.style.display = "none";
         }
     }
 
@@ -404,27 +312,24 @@
 
         setText(
             "optionType",
-            valueOrDash(
-                result.optionType
-            )
+            valueOrDash(result.optionType)
         );
 
         setText(
             "strike",
-            valueOrDash(
-                result.suggestedStrike
-            )
+            valueOrDash(result.suggestedStrike)
         );
 
         setText(
             "riskReward",
-            valueOrDash(
-                result.riskReward
-            )
+            valueOrDash(result.riskReward)
         );
 
         renderStrategies(
-            result.strategies.details
+            result.strategies &&
+            Array.isArray(result.strategies.details)
+                ? result.strategies.details
+                : []
         );
 
         renderDataSource();
@@ -446,9 +351,7 @@
 
     function renderStrategies(strategies) {
         const container =
-            document.getElementById(
-                "strategyList"
-            );
+            document.getElementById("strategyList");
 
         if (!container) return;
 
@@ -467,14 +370,14 @@
             const item =
                 document.createElement("div");
 
-            item.className =
-                "strategy-item";
+            item.className = "strategy-item";
 
             item.innerHTML = `
                 <div>
                     <strong>
                         ${escapeHTML(strategy.name)}
                     </strong>
+
                     <small>
                         ${escapeHTML(strategy.reason)}
                     </small>
@@ -485,35 +388,42 @@
                         ? "buy"
                         : "sell"
                 }">
-                    ${strategy.direction}
-                    ${strategy.score}
-                }
+                    ${escapeHTML(strategy.direction)}
+                    ${escapeHTML(strategy.score)}
+                </div>
             `;
 
             container.appendChild(item);
         });
     }
 
+    // ========================================================
+    // DATA SOURCE
+    // ========================================================
+
     function renderDataSource() {
         const el =
-            document.getElementById(
-                "dataSource"
-            );
+            document.getElementById("dataSource");
 
         if (!el) return;
 
         if (state.dataMode === "LIVE") {
             el.textContent =
                 "LIVE MARKET DATA";
-            el.className =
-                "live";
+
+            el.className = "live";
+
         } else {
             el.textContent =
-                "TEST DATA — NOT LIVE";
-            el.className =
-                "test";
+                "LIVE DATA UNAVAILABLE";
+
+            el.className = "test";
         }
     }
+
+    // ========================================================
+    // HTML ESCAPE
+    // ========================================================
 
     function escapeHTML(value) {
         return String(value)
@@ -530,9 +440,7 @@
 
     function initialize() {
         const button =
-            document.getElementById(
-                "runAnalysis"
-            );
+            document.getElementById("runAnalysis");
 
         if (button) {
             button.addEventListener(
@@ -541,24 +449,14 @@
             );
         }
 
-        setStatus(
-            "READY"
-        );
+        setStatus("READY");
 
         renderDataSource();
     }
 
     // ========================================================
-    // AUTO REFRESH
+    // PUBLIC APP OBJECT
     // ========================================================
-
-    /*
-     * Once the real backend is connected,
-     * analysis can refresh automatically.
-     *
-     * For now it is disabled to prevent
-     * unnecessary test calculations.
-     */
 
     window.SHIV_AI_APP = {
         state,
@@ -567,9 +465,12 @@
         getRealMarketData
     };
 
+    // ========================================================
+    // START
+    // ========================================================
+
     if (
-        document.readyState ===
-        "loading"
+        document.readyState === "loading"
     ) {
         document.addEventListener(
             "DOMContentLoaded",
