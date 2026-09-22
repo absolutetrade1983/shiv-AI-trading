@@ -1,661 +1,742 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+    <meta charset="UTF-8">
 
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  >
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
 
-  <title>SHIV AI Trading</title>
+    <title>SHIV AI TRADING</title>
 
-  <style>
-    * {
-      box-sizing: border-box;
-    }
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
 
-    body {
-      margin: 0;
-      background: #080b12;
-      color: #ffffff;
-      font-family: Arial, sans-serif;
-      min-height: 100vh;
-    }
+        body {
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
 
-    .container {
-      width: 100%;
-      max-width: 900px;
-      margin: auto;
-      padding: 18px;
-    }
+            background: #05070b;
+            color: #ffffff;
+            min-height: 100vh;
+        }
 
-    h1 {
-      text-align: center;
-      margin: 5px 0;
-      font-size: 30px;
-    }
+        .container {
+            width: 100%;
+            max-width: 1100px;
+            margin: auto;
+            padding: 20px;
+        }
 
-    .subtitle {
-      text-align: center;
-      color: #9ca3af;
-      margin-bottom: 20px;
-    }
+        header {
+            text-align: center;
+            padding: 20px 0 25px;
+        }
 
-    .status {
-      text-align: center;
-      background: #111827;
-      border: 1px solid #1f2937;
-      padding: 12px;
-      border-radius: 10px;
-      margin-bottom: 15px;
-    }
+        header h1 {
+            font-size: 34px;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
 
-    .connected {
-      color: #22c55e;
-      font-weight: bold;
-    }
+        header p {
+            margin-top: 8px;
+            color: #9da5b4;
+            font-size: 17px;
+        }
 
-    .error {
-      color: #ef4444;
-      font-weight: bold;
-    }
+        .status {
+            background: #101827;
+            border: 1px solid #202d43;
+            border-radius: 16px;
+            padding: 18px;
+            text-align: center;
+            margin-bottom: 16px;
+        }
 
-    .card {
-      background: #111827;
-      border: 1px solid #1f2937;
-      border-radius: 14px;
-      padding: 18px;
-      margin-bottom: 15px;
-    }
+        #engineStatus {
+            color: #25d366;
+            font-weight: 700;
+        }
 
-    .card h2 {
-      margin-top: 0;
-      font-size: 19px;
-    }
+        .source {
+            text-align: center;
+            margin-bottom: 16px;
+            color: #9da5b4;
+        }
 
-    button {
-      width: 100%;
-      border: none;
-      border-radius: 10px;
-      padding: 15px;
-      background: #2563eb;
-      color: white;
-      font-size: 16px;
-      font-weight: bold;
-      margin-bottom: 15px;
-      cursor: pointer;
-    }
+        #dataSource {
+            font-weight: 700;
+        }
 
-    button:active {
-      transform: scale(0.98);
-    }
+        #dataSource.live {
+            color: #25d366;
+        }
 
-    .signal {
-      text-align: center;
-      padding: 25px;
-      background: #0d131b;
-      border-radius: 12px;
-    }
+        #dataSource.test {
+            color: #ffb020;
+        }
 
-    .signal h3 {
-      margin: 0 0 8px;
-      font-size: 34px;
-    }
+        button {
+            width: 100%;
+            border: none;
+            border-radius: 15px;
+            padding: 18px;
+            font-size: 18px;
+            font-weight: 800;
+            cursor: pointer;
+            background: #2864e8;
+            color: white;
+            margin-bottom: 18px;
+        }
 
-    .buy {
-      color: #22c55e;
-    }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
 
-    .sell {
-      color: #ef4444;
-    }
+        .card {
+            background: #101827;
+            border: 1px solid #202d43;
+            border-radius: 18px;
+            padding: 20px;
+            margin-bottom: 18px;
+        }
 
-    .wait {
-      color: #facc15;
-    }
+        .card h2 {
+            font-size: 24px;
+            margin-bottom: 18px;
+        }
 
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 10px;
-    }
+        .decision {
+            background: #080e17;
+            border-radius: 16px;
+            padding: 25px;
+            text-align: center;
+        }
 
-    .item {
-      background: #0d131b;
-      padding: 12px;
-      border-radius: 9px;
-    }
+        #decision {
+            font-size: 46px;
+            font-weight: 900;
+            color: #ffcc00;
+        }
 
-    .label {
-      color: #9ca3af;
-      font-size: 12px;
-      margin-bottom: 5px;
-    }
+        .confidence {
+            margin-top: 8px;
+            color: #c5ccd8;
+            font-size: 19px;
+        }
 
-    .value {
-      font-size: 17px;
-      font-weight: bold;
-      word-break: break-word;
-    }
+        .grid {
+            display: grid;
+            grid-template-columns:
+                repeat(2, minmax(0, 1fr));
 
-    .reason {
-      background: #0d131b;
-      padding: 9px;
-      border-radius: 8px;
-      margin-bottom: 6px;
-      color: #d1d5db;
-    }
+            gap: 12px;
+        }
 
-    .footer {
-      text-align: center;
-      color: #6b7280;
-      font-size: 12px;
-      margin-top: 20px;
-    }
+        .box {
+            background: #080e17;
+            border-radius: 14px;
+            padding: 16px;
+            min-height: 85px;
+        }
 
-    @media (max-width: 600px) {
-      .container {
-        padding: 12px;
-      }
+        .label {
+            color: #929baa;
+            font-size: 14px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
 
-      .grid {
-        grid-template-columns: 1fr 1fr;
-      }
+        .value {
+            font-size: 21px;
+            font-weight: 800;
+            word-break: break-word;
+        }
 
-      .signal h3 {
-        font-size: 30px;
-      }
-    }
-  </style>
+        .buy {
+            color: #25d366 !important;
+        }
+
+        .sell {
+            color: #ff5263 !important;
+        }
+
+        .neutral {
+            color: #ffcc00;
+        }
+
+        .strategy-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 15px;
+
+            background: #080e17;
+            border-radius: 13px;
+            padding: 14px;
+            margin-bottom: 10px;
+        }
+
+        .strategy-item strong {
+            display: block;
+            font-size: 15px;
+        }
+
+        .strategy-item small {
+            display: block;
+            margin-top: 5px;
+            color: #8993a4;
+            line-height: 1.4;
+        }
+
+        .strategy-empty {
+            color: #8993a4;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .error {
+            display: none;
+            background: #32131a;
+            border: 1px solid #7d2635;
+            color: #ff7585;
+            border-radius: 13px;
+            padding: 15px;
+            margin-bottom: 18px;
+        }
+
+        .footer {
+            text-align: center;
+            color: #626b7b;
+            padding: 25px 0;
+            font-size: 13px;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 14px;
+            }
+
+            header h1 {
+                font-size: 29px;
+            }
+
+            .grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            #decision {
+                font-size: 38px;
+            }
+        }
+    </style>
 </head>
 
 <body>
 
-  <div class="container">
+<div class="container">
 
-    <h1>SHIV AI TRADING</h1>
+    <!-- HEADER -->
 
-    <div class="subtitle">
-      NIFTY • 5 MIN • Multi-Strategy Engine
-    </div>
+    <header>
+        <h1>SHIV AI TRADING</h1>
+
+        <p>
+            NIFTY • 5 MIN • MULTI-STRATEGY ENGINE
+        </p>
+    </header>
+
+
+    <!-- ENGINE STATUS -->
 
     <div class="status">
-      Engine Status:
-      <span id="status">CHECKING...</span>
+        Engine Status:
+        <span id="engineStatus">
+            READY
+        </span>
     </div>
 
-    <button onclick="runAnalysis()">
-      RUN AI ANALYSIS
+
+    <!-- DATA SOURCE -->
+
+    <div class="source">
+        Data Source:
+        <span id="dataSource">
+            TEST DATA — NOT LIVE
+        </span>
+    </div>
+
+
+    <!-- ERROR -->
+
+    <div
+        id="errorBox"
+        class="error"
+    ></div>
+
+
+    <!-- RUN -->
+
+    <button id="runAnalysis">
+        RUN AI ANALYSIS
     </button>
+
 
     <!-- AI DECISION -->
 
     <div class="card">
 
-      <h2>AI Decision</h2>
+        <h2>AI Decision</h2>
 
-      <div class="signal">
+        <div class="decision">
 
-        <h3 id="signal" class="wait">
-          WAIT
-        </h3>
+            <div id="decision">
+                WAIT
+            </div>
 
-        <div id="confidence">
-          Confidence: 0%
+            <div class="confidence">
+                Confidence:
+                <strong id="confidence">
+                    0%
+                </strong>
+            </div>
+
         </div>
-
-      </div>
 
     </div>
 
-    <!-- TRADE LEVELS -->
+
+    <!-- TRADE PLAN -->
 
     <div class="card">
 
-      <h2>Trade Levels</h2>
+        <h2>Trade Levels</h2>
 
-      <div class="grid">
+        <div class="grid">
 
-        <div class="item">
-          <div class="label">ENTRY</div>
-          <div class="value" id="entry">--</div>
+            <div class="box">
+                <div class="label">
+                    Entry
+                </div>
+
+                <div
+                    class="value"
+                    id="entry"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Stop Loss
+                </div>
+
+                <div
+                    class="value"
+                    id="stopLoss"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Target
+                </div>
+
+                <div
+                    class="value"
+                    id="target"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    ATR
+                </div>
+
+                <div
+                    class="value"
+                    id="atr"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Risk / Reward
+                </div>
+
+                <div
+                    class="value"
+                    id="riskReward"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Option Type
+                </div>
+
+                <div
+                    class="value"
+                    id="optionType"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Suggested Strike
+                </div>
+
+                <div
+                    class="value"
+                    id="strike"
+                >
+                    --
+                </div>
+            </div>
+
         </div>
-
-        <div class="item">
-          <div class="label">STOP LOSS</div>
-          <div class="value" id="stopLoss">--</div>
-        </div>
-
-        <div class="item">
-          <div class="label">TARGET</div>
-          <div class="value" id="target">--</div>
-        </div>
-
-        <div class="item">
-          <div class="label">ATR</div>
-          <div class="value" id="atr">--</div>
-        </div>
-
-      </div>
 
     </div>
 
-    <!-- SCORES -->
+
+    <!-- STRATEGY SCORES -->
 
     <div class="card">
 
-      <h2>Strategy Scores</h2>
+        <h2>Strategy Scores</h2>
 
-      <div class="grid">
+        <div class="grid">
 
-        <div class="item">
-          <div class="label">BUY SCORE</div>
-          <div class="value" id="buyScore">0</div>
+            <div class="box">
+                <div class="label">
+                    Buy Score
+                </div>
+
+                <div
+                    class="value buy"
+                    id="buyScore"
+                >
+                    0
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Sell Score
+                </div>
+
+                <div
+                    class="value sell"
+                    id="sellScore"
+                >
+                    0
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Buy Agreement
+                </div>
+
+                <div
+                    class="value"
+                    id="buyAgreement"
+                >
+                    0
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Sell Agreement
+                </div>
+
+                <div
+                    class="value"
+                    id="sellAgreement"
+                >
+                    0
+                </div>
+            </div>
+
         </div>
-
-        <div class="item">
-          <div class="label">SELL SCORE</div>
-          <div class="value" id="sellScore">0</div>
-        </div>
-
-        <div class="item">
-          <div class="label">BUY AGREEMENT</div>
-          <div class="value" id="buyAgreement">0</div>
-        </div>
-
-        <div class="item">
-          <div class="label">SELL AGREEMENT</div>
-          <div class="value" id="sellAgreement">0</div>
-        </div>
-
-      </div>
 
     </div>
 
-    <!-- MARKET STRUCTURE -->
+
+    <!-- MARKET ANALYSIS -->
 
     <div class="card">
 
-      <h2>Market Analysis</h2>
+        <h2>Market Analysis</h2>
 
-      <div class="grid">
+        <div class="grid">
 
-        <div class="item">
-          <div class="label">TREND</div>
-          <div class="value" id="trend">--</div>
+            <div class="box">
+                <div class="label">
+                    Trend
+                </div>
+
+                <div
+                    class="value"
+                    id="trend"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Structure
+                </div>
+
+                <div
+                    class="value"
+                    id="structure"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    BOS
+                </div>
+
+                <div
+                    class="value"
+                    id="bos"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    CHOCH
+                </div>
+
+                <div
+                    class="value"
+                    id="choch"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    FVG
+                </div>
+
+                <div
+                    class="value"
+                    id="fvg"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Liquidity
+                </div>
+
+                <div
+                    class="value"
+                    id="liquidity"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Fibonacci
+                </div>
+
+                <div
+                    class="value"
+                    id="fibonacci"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Price Range
+                </div>
+
+                <div
+                    class="value"
+                    id="priceRange"
+                >
+                    --
+                </div>
+            </div>
+
         </div>
-
-        <div class="item">
-          <div class="label">STRUCTURE</div>
-          <div class="value" id="structure">--</div>
-        </div>
-
-        <div class="item">
-          <div class="label">BOS</div>
-          <div class="value" id="bos">--</div>
-        </div>
-
-        <div class="item">
-          <div class="label">CHOCH</div>
-          <div class="value" id="choch">--</div>
-        </div>
-
-        <div class="item">
-          <div class="label">FVG</div>
-          <div class="value" id="fvg">--</div>
-        </div>
-
-        <div class="item">
-          <div class="label">LIQUIDITY</div>
-          <div class="value" id="liquidity">--</div>
-        </div>
-
-        <div class="item">
-          <div class="label">FIBONACCI</div>
-          <div class="value" id="fibonacci">--</div>
-        </div>
-
-        <div class="item">
-          <div class="label">PRICE RANGE</div>
-          <div class="value" id="priceRange">--</div>
-        </div>
-
-      </div>
 
     </div>
+
 
     <!-- INDICATORS -->
 
     <div class="card">
 
-      <h2>Indicators</h2>
+        <h2>Indicators</h2>
 
-      <div class="grid">
+        <div class="grid">
 
-        <div class="item">
-          <div class="label">EMA 9</div>
-          <div class="value" id="emaFast">--</div>
+            <div class="box">
+                <div class="label">
+                    EMA 9
+                </div>
+
+                <div
+                    class="value"
+                    id="ema9"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    EMA 21
+                </div>
+
+                <div
+                    class="value"
+                    id="ema21"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    RSI
+                </div>
+
+                <div
+                    class="value"
+                    id="rsi"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    VWAP
+                </div>
+
+                <div
+                    class="value"
+                    id="vwap"
+                >
+                    --
+                </div>
+            </div>
+
+
+            <div class="box">
+                <div class="label">
+                    Volume
+                </div>
+
+                <div
+                    class="value"
+                    id="volume"
+                >
+                    --
+                </div>
+            </div>
+
         </div>
-
-        <div class="item">
-          <div class="label">EMA 21</div>
-          <div class="value" id="emaSlow">--</div>
-        </div>
-
-        <div class="item">
-          <div class="label">RSI</div>
-          <div class="value" id="rsi">--</div>
-        </div>
-
-        <div class="item">
-          <div class="label">VWAP</div>
-          <div class="value" id="vwap">--</div>
-        </div>
-
-        <div class="item">
-          <div class="label">VOLUME</div>
-          <div class="value" id="volume">--</div>
-        </div>
-
-      </div>
 
     </div>
 
-    <!-- REASONS -->
+
+    <!-- STRATEGIES -->
 
     <div class="card">
 
-      <h2>Strategy Reasons</h2>
+        <h2>
+            Active Strategy Signals
+        </h2>
 
-      <div id="reasons">
-        Run analysis to see strategy confirmations.
-      </div>
+        <div id="strategyList">
+
+            <div class="strategy-empty">
+                Run analysis to see
+                strategy confirmations.
+            </div>
+
+        </div>
 
     </div>
+
+
+    <!-- FOOTER -->
 
     <div class="footer">
-      SHIV AI Trading • Rule-based multi-strategy engine
+        SHIV AI TRADING •
+        Strategy Engine v2
+        <br>
+        Paper / Testing Mode
     </div>
 
-  </div>
+</div>
 
 
-  <!-- ======================================================
-       IMPORTANT SCRIPT ORDER
-       strategy.js FIRST
-       app.js SECOND
-       ====================================================== -->
+<!-- IMPORTANT:
+     strategy.js MUST LOAD BEFORE app.js
+-->
 
-  <script src="strategy.js"></script>
-  <script src="app.js"></script>
-
-
-  <script>
-
-    // ========================================================
-    // ENGINE STATUS
-    // ========================================================
-
-    function checkEngine() {
-
-      const status =
-        document.getElementById("status");
-
-      if (
-        window.SHIV_AI_STRATEGY &&
-        typeof window.SHIV_AI_STRATEGY.analyzeNifty ===
-        "function"
-      ) {
-
-        status.textContent =
-          "CONNECTED";
-
-        status.className =
-          "connected";
-
-      } else {
-
-        status.textContent =
-          "NOT CONNECTED";
-
-        status.className =
-          "error";
-      }
-    }
-
-
-    // ========================================================
-    // NUMBER FORMAT
-    // ========================================================
-
-    function fmt(value) {
-
-      if (
-        value === null ||
-        value === undefined ||
-        Number.isNaN(Number(value))
-      ) {
-        return "--";
-      }
-
-      return Number(value).toFixed(2);
-    }
-
-
-    // ========================================================
-    // RUN ANALYSIS
-    // ========================================================
-
-    function runAnalysis() {
-
-      if (
-        !window.SHIV_AI_TRADING ||
-        typeof window.SHIV_AI_TRADING.runTest !==
-        "function"
-      ) {
-
-        alert(
-          "Trading engine load nahi hua. Page refresh karo."
-        );
-
-        return;
-      }
-
-      const result =
-        window.SHIV_AI_TRADING.runTest();
-
-      updateUI(result);
-    }
-
-
-    // ========================================================
-    // UPDATE UI
-    // ========================================================
-
-    function updateUI(result) {
-
-      if (!result) {
-        return;
-      }
-
-      const signal =
-        document.getElementById("signal");
-
-      signal.textContent =
-        result.signal || "WAIT";
-
-      signal.className = "";
-
-      if (result.signal === "BUY") {
-
-        signal.classList.add("buy");
-
-      } else if (result.signal === "SELL") {
-
-        signal.classList.add("sell");
-
-      } else {
-
-        signal.classList.add("wait");
-      }
-
-
-      document.getElementById("confidence")
-        .textContent =
-        "Confidence: " +
-        (result.confidence || 0) +
-        "%";
-
-
-      document.getElementById("entry")
-        .textContent =
-        fmt(result.entry);
-
-
-      document.getElementById("stopLoss")
-        .textContent =
-        fmt(result.stopLoss);
-
-
-      document.getElementById("target")
-        .textContent =
-        fmt(result.target);
-
-
-      document.getElementById("atr")
-        .textContent =
-        fmt(result.atr);
-
-
-      document.getElementById("buyScore")
-        .textContent =
-        result.buyScore || 0;
-
-
-      document.getElementById("sellScore")
-        .textContent =
-        result.sellScore || 0;
-
-
-      document.getElementById("buyAgreement")
-        .textContent =
-        result.buyAgreement || 0;
-
-
-      document.getElementById("sellAgreement")
-        .textContent =
-        result.sellAgreement || 0;
-
-
-      document.getElementById("trend")
-        .textContent =
-        result.trend || "--";
-
-
-      document.getElementById("structure")
-        .textContent =
-        result.marketStructure || "--";
-
-
-      document.getElementById("bos")
-        .textContent =
-        result.bos || "--";
-
-
-      document.getElementById("choch")
-        .textContent =
-        result.choch || "--";
-
-
-      document.getElementById("fvg")
-        .textContent =
-        result.fvg || "--";
-
-
-      document.getElementById("liquidity")
-        .textContent =
-        result.liquidity || "--";
-
-
-      document.getElementById("fibonacci")
-        .textContent =
-        result.fibonacci || "--";
-
-
-      document.getElementById("priceRange")
-        .textContent =
-        result.priceRange || "--";
-
-
-      document.getElementById("emaFast")
-        .textContent =
-        fmt(result.emaFast);
-
-
-      document.getElementById("emaSlow")
-        .textContent =
-        fmt(result.emaSlow);
-
-
-      document.getElementById("rsi")
-        .textContent =
-        fmt(result.rsi);
-
-
-      document.getElementById("vwap")
-        .textContent =
-        fmt(result.vwap);
-
-
-      document.getElementById("volume")
-        .textContent =
-        result.volume || "--";
-
-
-      const reasons =
-        document.getElementById("reasons");
-
-      reasons.innerHTML = "";
-
-
-      if (
-        result.reasons &&
-        result.reasons.length > 0
-      ) {
-
-        result.reasons.forEach(function(reason) {
-
-          const div =
-            document.createElement("div");
-
-          div.className =
-            "reason";
-
-          div.textContent =
-            "• " + reason;
-
-          reasons.appendChild(div);
-
-        });
-
-      } else {
-
-        reasons.textContent =
-          "No strong confirmation.";
-
-      }
-
-    }
-
-
-    // ========================================================
-    // CHECK ENGINE ON PAGE LOAD
-    // ========================================================
-
-    checkEngine();
-
-  </script>
+<script src="strategy.js"></script>
+<script src="app.js"></script>
 
 </body>
 </html>
