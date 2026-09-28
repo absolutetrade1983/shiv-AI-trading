@@ -932,91 +932,95 @@ function generateStrategySignals(data) {
 // ============================================================
 
 function calculateConfluence(strategies) {
-    const buy = strategies.filter(
-        s => s.direction === "BUY"
-    );
 
-    const sell = strategies.filter(
-        s => s.direction === "SELL"
-    );
+    const WEIGHTS = {
+        MARKET_STRUCTURE: 15,
+        BOS: 15,
+        CHOCH: 10,
+        FVG: 8,
+        LIQUIDITY: 8,
+        FIBONACCI: 5,
+        EMA: 12,
+        VWAP: 10,
+        RSI: 7,
+        VOLUME: 5,
+        PRICE_RANGE: 5
+    };
 
-    const uniqueBuy =
-        [...new Set(buy.map(s => s.name))];
+    function calculateSide(direction) {
 
-    const uniqueSell =
-        [...new Set(sell.map(s => s.name))];
-
-    const buyAgreement =
-        uniqueBuy.length;
-
-    const sellAgreement =
-        uniqueSell.length;
-
-    /*
-     * Score is based on:
-     * - number of independent confirmations
-     * - average quality
-     * - capped at 100
-     */
-
-    function score(list) {
-        if (!list.length) return 0;
-
-        const unique =
-            [...new Set(list.map(s => s.name))];
-
-        const average =
-            avg(list.map(s => s.score));
-
-        const agreementBonus =
-            Math.min(unique.length * 5, 25);
-
-        return Math.round(
-            clamp(
-                average + agreementBonus,
-                0,
-                100
-            )
+        const selected = strategies.filter(
+            s => s.direction === direction
         );
+
+        const uniqueNames = [
+            ...new Set(selected.map(s => s.name))
+        ];
+
+        let score = 0;
+
+        for (const name of uniqueNames) {
+            score += WEIGHTS[name] || 0;
+        }
+
+        return {
+            score: Math.round(clamp(score, 0, 100)),
+            agreement: uniqueNames.length,
+            names: uniqueNames
+        };
     }
 
-    const buyScore = score(buy);
-    const sellScore = score(sell);
+    const buy = calculateSide("BUY");
+    const sell = calculateSide("SELL");
 
     let decision = "WAIT";
-    let confidence = Math.max(
-        buyScore,
-        sellScore
-    );
+
+    const minimumScore = 60;
+    const minimumAgreement = SETTINGS.minimumAgreement;
+
+    const scoreDifference =
+        Math.abs(buy.score - sell.score);
 
     if (
-        buyAgreement >= SETTINGS.minimumAgreement &&
-        buyScore >= SETTINGS.minimumConfluence &&
-        buyScore > sellScore
+        buy.agreement >= minimumAgreement &&
+        buy.score >= minimumScore &&
+        buy.score > sell.score &&
+        scoreDifference >= 15
     ) {
         decision = "BUY";
     }
 
     if (
-        sellAgreement >= SETTINGS.minimumAgreement &&
-        sellScore >= SETTINGS.minimumConfluence &&
-        sellScore > buyScore
+        sell.agreement >= minimumAgreement &&
+        sell.score >= minimumScore &&
+        sell.score > buy.score &&
+        scoreDifference >= 15
     ) {
         decision = "SELL";
     }
 
+    const dominantScore =
+        Math.max(buy.score, sell.score);
+
+    const confidence =
+        decision === "WAIT"
+            ? Math.min(dominantScore, 99)
+            : dominantScore;
+
     return {
         decision,
         confidence,
-        buyScore,
-        sellScore,
-        buyAgreement,
-        sellAgreement,
-        buyStrategies: uniqueBuy,
-        sellStrategies: uniqueSell
+
+        buyScore: buy.score,
+        sellScore: sell.score,
+
+        buyAgreement: buy.agreement,
+        sellAgreement: sell.agreement,
+
+        buyStrategies: buy.names,
+        sellStrategies: sell.names
     };
 }
-
 // ============================================================
 // TRADE PLAN
 // ============================================================
