@@ -5,6 +5,7 @@
 // ============================================================
 
 (function () {
+
     "use strict";
 
     const ENGINE = window.SHIV_AI_STRATEGY;
@@ -29,18 +30,25 @@
     // ========================================================
 
     const state = {
+
         candles: [],
         analysis: null,
+
         dataMode: "OFFLINE",
+
         lastUpdate: null,
+
         busy: false,
 
         market: "NIFTY",
 
         autoRefreshTimer: null,
+
         lastCandleTime: null,
+
         retryTimer: null,
 
+        // ONE timestamp for the complete analysis
         signalTime: null
     };
 
@@ -49,6 +57,7 @@
     // ========================================================
 
     const MARKETS = {
+
         NIFTY: {
             name: "NIFTY",
             display: "NIFTY"
@@ -63,7 +72,20 @@
             name: "SENSEX",
             display: "SENSEX"
         }
+
     };
+
+    // ========================================================
+    // MARKET DISPLAY
+    // ========================================================
+
+    function getMarketDisplay() {
+
+        return MARKETS[state.market]
+            ? MARKETS[state.market].display
+            : state.market;
+
+    }
 
     // ========================================================
     // MARKET SELECTOR
@@ -127,7 +149,8 @@
                 const option =
                     document.createElement("option");
 
-                option.value = key;
+                option.value =
+                    key;
 
                 option.textContent =
                     MARKETS[key].display;
@@ -135,6 +158,7 @@
                 select.appendChild(
                     option
                 );
+
             }
         );
 
@@ -179,7 +203,7 @@
 
                 setText(
                     "confidence",
-                    `${getMarketDisplay()} — WAITING`
+                    "BUY Confidence: -- | SELL Confidence: --"
                 );
 
                 setText(
@@ -202,14 +226,15 @@
                         "Market switch error:",
                         error
                     );
+
                 }
+
             }
         );
 
         wrapper.appendChild(label);
         wrapper.appendChild(select);
 
-        // Put selector above Run Analysis button
         const button =
             document.getElementById(
                 "runAnalysis"
@@ -230,27 +255,23 @@
             document.body.prepend(
                 wrapper
             );
+
         }
 
         return select;
     }
 
-    function getMarketDisplay() {
-
-        return MARKETS[state.market]
-            ? MARKETS[state.market].display
-            : state.market;
-    }
-
     // ========================================================
-    // REAL MARKET DATA
+    // GET REAL MARKET DATA
     // ========================================================
 
     async function getRealMarketData() {
 
         const url =
             `${CANDLES_ENDPOINT}` +
-            `?market=${encodeURIComponent(state.market)}` +
+            `?market=${encodeURIComponent(
+                state.market
+            )}` +
             `&limit=100`;
 
         const response =
@@ -278,6 +299,7 @@
             throw new Error(
                 "Invalid response from market server"
             );
+
         }
 
         if (!response.ok) {
@@ -289,6 +311,7 @@
                     ? data.detail
                     : "Market data server unavailable"
             );
+
         }
 
         if (
@@ -301,6 +324,7 @@
             throw new Error(
                 "Invalid market candle data"
             );
+
         }
 
         if (
@@ -310,9 +334,11 @@
             throw new Error(
                 `Not enough ${getMarketDisplay()} 5-minute candles received`
             );
+
         }
 
         return data.candles;
+
     }
 
     // ========================================================
@@ -336,6 +362,42 @@
         renderDataSource();
 
         return true;
+
+    }
+
+    // ========================================================
+    // GET CANDLE TIME
+    // ========================================================
+
+    function getLatestCandleTime(
+        candles
+    ) {
+
+        if (
+            !candles ||
+            !candles.length
+        ) {
+
+            return null;
+
+        }
+
+        const newestCandle =
+            candles[
+                candles.length - 1
+            ];
+
+        if (!newestCandle) {
+            return null;
+        }
+
+        return (
+            newestCandle.time ||
+            newestCandle.timestamp ||
+            newestCandle.datetime ||
+            null
+        );
+
     }
 
     // ========================================================
@@ -360,6 +422,7 @@
             setButtonState(
                 true
             );
+
         }
 
         setStatus(
@@ -369,6 +432,10 @@
         );
 
         try {
+
+            // ------------------------------------------------
+            // GET LIVE CANDLES
+            // ------------------------------------------------
 
             const candles =
                 await getRealMarketData();
@@ -382,26 +449,44 @@
             state.lastUpdate =
                 new Date();
 
-            const newestCandle =
-                candles[
-                    candles.length - 1
-                ];
+            // ------------------------------------------------
+            // ONE SINGLE TIME FOR THIS ANALYSIS
+            // ------------------------------------------------
+
+            const latestCandleTime =
+                getLatestCandleTime(
+                    candles
+                );
 
             state.lastCandleTime =
-                newestCandle.time ||
-                newestCandle.timestamp ||
-                null;
+                latestCandleTime;
 
-            // Signal time is based on the actual
-            // latest 5-minute candle timestamp.
+            /*
+             * IMPORTANT:
+             *
+             * BUY confidence
+             * SELL confidence
+             * WAIT
+             * BUY confirmation
+             * SELL confirmation
+             *
+             * ALL belong to this SAME analysis candle.
+             *
+             * Therefore ALL use ONE signalTime.
+             */
+
             state.signalTime =
-                state.lastCandleTime;
+                latestCandleTime;
 
             renderDataSource();
 
             setStatus(
                 `ANALYZING LIVE ${getMarketDisplay()} 5 MIN DATA...`
             );
+
+            // ------------------------------------------------
+            // RUN STRATEGY ENGINE
+            // ------------------------------------------------
 
             const result =
                 ENGINE.analyzeMarket(
@@ -419,10 +504,15 @@
                         ? result.error
                         : "Analysis failed"
                 );
+
             }
 
             state.analysis =
                 result;
+
+            // ------------------------------------------------
+            // RENDER COMPLETE RESULT
+            // ------------------------------------------------
 
             renderAnalysis(
                 result
@@ -465,6 +555,7 @@
                 showError(
                     error.message
                 );
+
             }
 
             scheduleNextAutoRefresh();
@@ -479,15 +570,20 @@
                 setButtonState(
                     false
                 );
+
             }
+
         }
+
     }
 
     // ========================================================
-    // UI HELPERS
+    // UI STATUS
     // ========================================================
 
-    function setStatus(text) {
+    function setStatus(
+        text
+    ) {
 
         const el =
             document.getElementById(
@@ -498,8 +594,14 @@
 
             el.textContent =
                 text;
+
         }
+
     }
+
+    // ========================================================
+    // BUTTON
+    // ========================================================
 
     function setButtonState(
         busy
@@ -521,7 +623,12 @@
             busy
                 ? "ANALYZING..."
                 : "RUN AI ANALYSIS";
+
     }
+
+    // ========================================================
+    // ERROR
+    // ========================================================
 
     function showError(
         message
@@ -540,7 +647,9 @@
 
             el.style.display =
                 "block";
+
         }
+
     }
 
     function hideError() {
@@ -554,8 +663,14 @@
 
             el.style.display =
                 "none";
+
         }
+
     }
+
+    // ========================================================
+    // VALUE
+    // ========================================================
 
     function valueOrDash(
         value
@@ -568,6 +683,7 @@
         )
             ? "--"
             : value;
+
     }
 
     // ========================================================
@@ -592,20 +708,18 @@
         ) {
 
             return String(value);
+
         }
 
-        return date.toLocaleString(
+        return date.toLocaleTimeString(
             "en-IN",
             {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
                 hour: "2-digit",
                 minute: "2-digit",
-                second: "2-digit",
                 hour12: true
             }
         );
+
     }
 
     // ========================================================
@@ -630,38 +744,61 @@
                 result.scores.sell
             ) || 0;
 
-        const decision =
-            result &&
-            result.decision
-                ? result.decision
-                : "WAIT";
-
-        if (
-            decision === "BUY"
-        ) {
-
-            return `BUY Confidence: ${buy}%`;
-        }
-
-        if (
-            decision === "SELL"
-        ) {
-
-            return `SELL Confidence: ${sell}%`;
-        }
-
-        if (
-            buy === 0 &&
-            sell === 0
-        ) {
-
-            return "Confidence: 0%";
-        }
+        /*
+         * ALWAYS SHOW BOTH CONFIDENCES.
+         *
+         * Both BUY and SELL are calculated
+         * from the SAME market candle.
+         */
 
         return (
             `BUY Confidence: ${buy}% | ` +
             `SELL Confidence: ${sell}%`
         );
+
+    }
+
+    // ========================================================
+    // FINAL SIGNAL CHECK
+    // ========================================================
+
+    function isFinalSignal(
+        result
+    ) {
+
+        if (!result) {
+            return false;
+        }
+
+        const buy =
+            Number(
+                result.scores &&
+                result.scores.buy
+            ) || 0;
+
+        const sell =
+            Number(
+                result.scores &&
+                result.scores.sell
+            ) || 0;
+
+        /*
+         * Final signal means the strategy engine
+         * has selected BUY/SELL and the directional
+         * confidence has reached 100.
+         */
+
+        return (
+            (
+                result.decision === "BUY" &&
+                buy >= 100
+            ) ||
+            (
+                result.decision === "SELL" &&
+                sell >= 100
+            )
+        );
+
     }
 
     // ========================================================
@@ -674,18 +811,18 @@
 
         hideError();
 
-        // -----------------------------
-        // Decision
-        // -----------------------------
+        // ----------------------------------------------------
+        // DECISION
+        // ----------------------------------------------------
 
         setText(
             "decision",
             result.decision
         );
 
-        // -----------------------------
-        // Directional confidence
-        // -----------------------------
+        // ----------------------------------------------------
+        // BOTH CONFIDENCES
+        // ----------------------------------------------------
 
         setText(
             "confidence",
@@ -694,9 +831,9 @@
             )
         );
 
-        // -----------------------------
-        // Signal time
-        // -----------------------------
+        // ----------------------------------------------------
+        // ONE SIGNAL TIME
+        // ----------------------------------------------------
 
         setText(
             "signalTime",
@@ -705,16 +842,23 @@
             )
         );
 
+        /*
+         * signalCandle is kept for compatibility
+         * with existing HTML.
+         *
+         * It uses EXACTLY the same timestamp.
+         */
+
         setText(
             "signalCandle",
             formatSignalTime(
-                state.lastCandleTime
+                state.signalTime
             )
         );
 
-        // -----------------------------
-        // Trade levels
-        // -----------------------------
+        // ----------------------------------------------------
+        // TRADE LEVELS
+        // ----------------------------------------------------
 
         setText(
             "entry",
@@ -744,106 +888,118 @@
             )
         );
 
-        // -----------------------------
-        // Strategy scores
-        // -----------------------------
+        // ----------------------------------------------------
+        // STRATEGY SCORES
+        // ----------------------------------------------------
 
         setText(
             "buyScore",
+            result.scores &&
             result.scores.buy
         );
 
         setText(
             "sellScore",
+            result.scores &&
             result.scores.sell
         );
 
         setText(
             "buyAgreement",
+            result.scores &&
             result.scores.buyAgreement
         );
 
         setText(
             "sellAgreement",
+            result.scores &&
             result.scores.sellAgreement
         );
 
-        // -----------------------------
-        // Market analysis
-        // -----------------------------
+        // ----------------------------------------------------
+        // MARKET ANALYSIS
+        // ----------------------------------------------------
+
+        const marketAnalysis =
+            result.marketAnalysis ||
+            {};
 
         setText(
             "trend",
-            result.marketAnalysis.trend
+            marketAnalysis.trend
         );
 
         setText(
             "structure",
-            result.marketAnalysis.structure
+            marketAnalysis.structure
         );
 
         setText(
             "bos",
-            result.marketAnalysis.bos
+            marketAnalysis.bos
         );
 
         setText(
             "choch",
-            result.marketAnalysis.choch
+            marketAnalysis.choch
         );
 
         setText(
             "fvg",
-            result.marketAnalysis.fvg
+            marketAnalysis.fvg
         );
 
         setText(
             "liquidity",
-            result.marketAnalysis.liquidity
+            marketAnalysis.liquidity
         );
 
         setText(
             "fibonacci",
-            result.marketAnalysis.fibonacci
+            marketAnalysis.fibonacci
         );
 
         setText(
             "priceRange",
-            result.marketAnalysis.priceRange
+            marketAnalysis.priceRange
         );
 
-        // -----------------------------
-        // Indicators
-        // -----------------------------
+        // ----------------------------------------------------
+        // INDICATORS
+        // ----------------------------------------------------
+
+        const indicators =
+            result.indicators ||
+            {};
 
         setText(
             "ema9",
-            result.indicators.ema9
+            indicators.ema9
         );
 
         setText(
             "ema21",
-            result.indicators.ema21
+            indicators.ema21
         );
 
         setText(
             "rsi",
-            result.indicators.rsi
+            indicators.rsi
         );
 
         setText(
             "vwap",
-            result.indicators.vwap
+            indicators.vwap
         );
 
         setText(
             "volume",
-            result.indicators.volumeSignal
+            indicators.volumeSignal
         );
 
-        // -----------------------------
-        // Option data
-        // -----------------------------
+        // ----------------------------------------------------
+        // OPTION DATA
+        // ----------------------------------------------------
 
         setText(
             "optionType",
@@ -866,9 +1022,40 @@
             )
         );
 
-        // -----------------------------
-        // Strategies
-        // -----------------------------
+        // ----------------------------------------------------
+        // FINAL SIGNAL TIME
+        // ----------------------------------------------------
+
+        /*
+         * If the engine produces a final 100% signal,
+         * the SAME signalTime is used.
+         */
+
+        if (
+            isFinalSignal(
+                result
+            )
+        ) {
+
+            setText(
+                "finalSignalTime",
+                formatSignalTime(
+                    state.signalTime
+                )
+            );
+
+        } else {
+
+            setText(
+                "finalSignalTime",
+                "--"
+            );
+
+        }
+
+        // ----------------------------------------------------
+        // STRATEGIES
+        // ----------------------------------------------------
 
         renderStrategies(
             result.strategies &&
@@ -880,6 +1067,7 @@
         );
 
         renderDataSource();
+
     }
 
     // ========================================================
@@ -902,7 +1090,9 @@
                 valueOrDash(
                     value
                 );
+
         }
+
     }
 
     // ========================================================
@@ -935,6 +1125,7 @@
                 "</div>";
 
             return;
+
         }
 
         strategies.forEach(
@@ -980,8 +1171,10 @@
                 container.appendChild(
                     item
                 );
+
             }
         );
+
     }
 
     // ========================================================
@@ -1017,7 +1210,9 @@
 
             el.className =
                 "test";
+
         }
+
     }
 
     // ========================================================
@@ -1049,6 +1244,7 @@
                 "'",
                 "&#039;"
             );
+
     }
 
     // ========================================================
@@ -1065,6 +1261,7 @@
             clearTimeout(
                 state.autoRefreshTimer
             );
+
         }
 
         const now =
@@ -1090,6 +1287,7 @@
         ) {
 
             minutesToNext = 5;
+
         }
 
         let delay =
@@ -1122,18 +1320,17 @@
                     } else {
 
                         scheduleNextAutoRefresh();
+
                     }
 
                 },
                 delay
             );
+
     }
 
     // ========================================================
     // MARKET HOURS
-    // NSE / BSE INDEX HOURS
-    // 09:15 AM - 03:30 PM
-    // Monday - Friday
     // ========================================================
 
     function isMarketHours() {
@@ -1150,6 +1347,7 @@
         ) {
 
             return false;
+
         }
 
         const hour =
@@ -1185,6 +1383,7 @@
             totalMinutes <
                 marketClose
         );
+
     }
 
     // ========================================================
@@ -1200,6 +1399,7 @@
         loadMarketData,
 
         getRealMarketData
+
     };
 
     // ========================================================
@@ -1221,6 +1421,7 @@
                 "click",
                 runAnalysis
             );
+
         }
 
         setStatus(
@@ -1230,6 +1431,7 @@
         renderDataSource();
 
         scheduleNextAutoRefresh();
+
     }
 
     // ========================================================
@@ -1249,6 +1451,7 @@
     } else {
 
         initialize();
+
     }
 
 })();
