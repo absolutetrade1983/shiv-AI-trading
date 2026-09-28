@@ -7,12 +7,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from SmartApi import SmartConnect
 
 # =========================================================
-# SHIV AI TRADING - BACKEND SERVER
+# SHIV AI TRADING - MULTI MARKET BACKEND
 # Angel One SmartAPI
-# NIFTY 5-Minute Live Candles
+# NIFTY | BANK NIFTY | SENSEX
+# 5-MINUTE LIVE CANDLES
 # =========================================================
 
-app = FastAPI(title="SHIV AI TRADING API", version="1.0.0")
+app = FastAPI(
+    title="SHIV AI TRADING API",
+    version="2.0.0"
+)
 
 # ---------------------------------------------------------
 # CORS
@@ -35,10 +39,41 @@ CLIENT_CODE = os.getenv("ANGEL_CLIENT_CODE", "")
 PIN = os.getenv("ANGEL_PIN", "")
 TOTP_SECRET = os.getenv("ANGEL_TOTP_SECRET", "")
 
-# NIFTY 50
-NIFTY_TOKEN = "99926000"
-EXCHANGE = "NSE"
-SYMBOL = "NIFTY"
+# ---------------------------------------------------------
+# SUPPORTED MARKETS
+# ---------------------------------------------------------
+#
+# Angel One index tokens:
+#
+# NIFTY     -> 99926000 / NSE
+# BANKNIFTY -> 99926009 / NSE
+# SENSEX    -> 99919000 / BSE
+#
+# ---------------------------------------------------------
+
+MARKETS = {
+
+    "NIFTY": {
+        "name": "NIFTY",
+        "symbol": "NIFTY",
+        "token": "99926000",
+        "exchange": "NSE"
+    },
+
+    "BANKNIFTY": {
+        "name": "BANK NIFTY",
+        "symbol": "BANKNIFTY",
+        "token": "99926009",
+        "exchange": "NSE"
+    },
+
+    "SENSEX": {
+        "name": "SENSEX",
+        "symbol": "SENSEX",
+        "token": "99919000",
+        "exchange": "BSE"
+    }
+}
 
 INTERVAL = "FIVE_MINUTE"
 
@@ -53,27 +88,91 @@ session_time = 0
 SESSION_VALID_SECONDS = 20 * 60
 
 
+# ---------------------------------------------------------
+# MARKET HELPER
+# ---------------------------------------------------------
+
+def normalize_market(market: str):
+
+    if not market:
+        market = "NIFTY"
+
+    market = market.upper().strip()
+
+    aliases = {
+        "NIFTY50": "NIFTY",
+        "NIFTY 50": "NIFTY",
+
+        "BANK NIFTY": "BANKNIFTY",
+        "BANK_NIFTY": "BANKNIFTY",
+        "BANK-NIFTY": "BANKNIFTY",
+
+        "SENSEX": "SENSEX"
+    }
+
+    market = aliases.get(market, market)
+
+    if market not in MARKETS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Unsupported market. "
+                "Use NIFTY, BANKNIFTY or SENSEX."
+            )
+        )
+
+    return market
+
+
+def get_market_config(market: str):
+
+    market = normalize_market(market)
+
+    return (
+        market,
+        MARKETS[market]
+    )
+
+
+# ---------------------------------------------------------
+# CREATE ANGEL ONE SESSION
+# ---------------------------------------------------------
+
 def create_session():
+
     global smart_api
     global jwt_token
     global session_time
 
     if not API_KEY:
-        raise Exception("ANGEL_API_KEY is missing")
+        raise Exception(
+            "ANGEL_API_KEY is missing"
+        )
 
     if not CLIENT_CODE:
-        raise Exception("ANGEL_CLIENT_CODE is missing")
+        raise Exception(
+            "ANGEL_CLIENT_CODE is missing"
+        )
 
     if not PIN:
-        raise Exception("ANGEL_PIN is missing")
+        raise Exception(
+            "ANGEL_PIN is missing"
+        )
 
     if not TOTP_SECRET:
-        raise Exception("ANGEL_TOTP_SECRET is missing")
+        raise Exception(
+            "ANGEL_TOTP_SECRET is missing"
+        )
 
     try:
-        smart_api = SmartConnect(api_key=API_KEY)
 
-        totp = pyotp.TOTP(TOTP_SECRET).now()
+        smart_api = SmartConnect(
+            api_key=API_KEY
+        )
+
+        totp = pyotp.TOTP(
+            TOTP_SECRET
+        ).now()
 
         login_data = smart_api.generateSession(
             CLIENT_CODE,
@@ -82,34 +181,51 @@ def create_session():
         )
 
         if not login_data:
-            raise Exception("Empty Angel One login response")
+            raise Exception(
+                "Empty Angel One login response"
+            )
 
         if login_data.get("status") is not True:
+
             message = login_data.get(
                 "message",
                 "Angel One login failed"
             )
+
             raise Exception(message)
 
         data = login_data.get("data") or {}
 
-        jwt_token = data.get("jwtToken")
+        jwt_token = data.get(
+            "jwtToken"
+        )
 
         if not jwt_token:
-            raise Exception("JWT token not received")
+            raise Exception(
+                "JWT token not received"
+            )
 
         session_time = time.time()
 
         return True
 
     except Exception as e:
+
         smart_api = None
         jwt_token = None
         session_time = 0
-        raise Exception(f"Angel One login error: {str(e)}")
 
+        raise Exception(
+            f"Angel One login error: {str(e)}"
+        )
+
+
+# ---------------------------------------------------------
+# ENSURE SESSION
+# ---------------------------------------------------------
 
 def ensure_session():
+
     global smart_api
     global jwt_token
     global session_time
@@ -117,50 +233,80 @@ def ensure_session():
     if (
         smart_api is None
         or jwt_token is None
-        or (time.time() - session_time) > SESSION_VALID_SECONDS
+        or (
+            time.time() - session_time
+        ) > SESSION_VALID_SECONDS
     ):
+
         create_session()
 
     return smart_api
 
 
 # ---------------------------------------------------------
-# HEALTH CHECK
+# ROOT
 # ---------------------------------------------------------
 
 @app.get("/")
 def root():
+
     return {
         "status": "online",
         "name": "SHIV AI TRADING",
         "engine": "AI Trading Backend",
-        "market": "NIFTY",
+        "markets": [
+            "NIFTY",
+            "BANKNIFTY",
+            "SENSEX"
+        ],
         "timeframe": "5 Minute",
         "mode": "LIVE"
     }
 
 
+# ---------------------------------------------------------
+# HEALTH CHECK
+# ---------------------------------------------------------
+
 @app.get("/health")
 def health():
+
     return {
         "status": "healthy",
         "server": "SHIV AI TRADING",
+
         "angel_configured": bool(
-            API_KEY and CLIENT_CODE and PIN and TOTP_SECRET
+            API_KEY
+            and CLIENT_CODE
+            and PIN
+            and TOTP_SECRET
         ),
-        "symbol": SYMBOL,
-        "token": NIFTY_TOKEN,
+
+        "markets": {
+            "NIFTY": MARKETS["NIFTY"],
+            "BANKNIFTY": MARKETS["BANKNIFTY"],
+            "SENSEX": MARKETS["SENSEX"]
+        },
+
         "interval": INTERVAL
     }
 
 
 # ---------------------------------------------------------
-# GET LIVE NIFTY 5-MINUTE CANDLES
+# GET LIVE 5-MINUTE CANDLES
 # ---------------------------------------------------------
 
 @app.get("/api/candles")
-def get_candles(limit: int = 100):
+def get_candles(
+    limit: int = 100,
+    market: str = "NIFTY"
+):
+
     try:
+
+        # -----------------------------
+        # Validate limit
+        # -----------------------------
 
         if limit < 20:
             limit = 20
@@ -168,36 +314,91 @@ def get_candles(limit: int = 100):
         if limit > 200:
             limit = 200
 
+        # -----------------------------
+        # Market
+        # -----------------------------
+
+        market_key, config = get_market_config(
+            market
+        )
+
+        exchange = config["exchange"]
+        symbol = config["symbol"]
+        token = config["token"]
+
+        # -----------------------------
+        # Angel Session
+        # -----------------------------
+
         api = ensure_session()
 
+        # -----------------------------
+        # Time range
+        # -----------------------------
+
         now = datetime.now()
-        from_time = now - timedelta(days=5)
+
+        from_time = (
+            now - timedelta(days=5)
+        )
+
+        # -----------------------------
+        # Historical parameters
+        # -----------------------------
 
         historic_params = {
-            "exchange": EXCHANGE,
-            "symboltoken": NIFTY_TOKEN,
+
+            "exchange": exchange,
+
+            "symboltoken": token,
+
             "interval": INTERVAL,
-            "fromdate": from_time.strftime("%Y-%m-%d %H:%M"),
-            "todate": now.strftime("%Y-%m-%d %H:%M")
+
+            "fromdate":
+                from_time.strftime(
+                    "%Y-%m-%d %H:%M"
+                ),
+
+            "todate":
+                now.strftime(
+                    "%Y-%m-%d %H:%M"
+                )
         }
 
-        response = api.getCandleData(historic_params)
+        # -----------------------------
+        # Get candles
+        # -----------------------------
+
+        response = api.getCandleData(
+            historic_params
+        )
 
         if not response:
-            raise Exception("Empty candle response")
+            raise Exception(
+                "Empty candle response"
+            )
 
         if response.get("status") is not True:
+
             raise Exception(
                 response.get(
                     "message",
-                    "Unable to fetch NIFTY candles"
+                    f"Unable to fetch {market_key} candles"
                 )
             )
 
-        raw_data = response.get("data") or []
+        raw_data = (
+            response.get("data") or []
+        )
 
         if not raw_data:
-            raise Exception("No candle data received")
+            raise Exception(
+                f"No candle data received for {market_key}"
+            )
+
+        # -----------------------------
+        # Format candles
+        # -----------------------------
 
         candles = []
 
@@ -206,24 +407,64 @@ def get_candles(limit: int = 100):
             if len(row) < 6:
                 continue
 
-            candles.append({
-                "time": row[0],
-                "open": float(row[1]),
-                "high": float(row[2]),
-                "low": float(row[3]),
-                "close": float(row[4]),
-                "volume": float(row[5])
-            })
+            try:
+
+                candles.append({
+
+                    "time": row[0],
+
+                    "open": float(row[1]),
+
+                    "high": float(row[2]),
+
+                    "low": float(row[3]),
+
+                    "close": float(row[4]),
+
+                    "volume": float(row[5])
+
+                })
+
+            except (
+                TypeError,
+                ValueError
+            ):
+
+                continue
+
+        if len(candles) < 20:
+
+            raise Exception(
+                f"Not enough {market_key} candle data"
+            )
+
+        # -----------------------------
+        # Response
+        # -----------------------------
 
         return {
+
             "success": True,
-            "symbol": SYMBOL,
-            "token": NIFTY_TOKEN,
-            "exchange": EXCHANGE,
+
+            "market": market_key,
+
+            "symbol": symbol,
+
+            "token": token,
+
+            "exchange": exchange,
+
             "timeframe": "5m",
+
+            "interval": INTERVAL,
+
             "count": len(candles),
+
             "candles": candles
         }
+
+    except HTTPException:
+        raise
 
     except Exception as e:
 
@@ -234,46 +475,76 @@ def get_candles(limit: int = 100):
 
 
 # ---------------------------------------------------------
-# MARKET DATA ENDPOINT
+# MARKET LTP
 # ---------------------------------------------------------
 
 @app.get("/api/market")
-def market_data():
+def market_data(
+    market: str = "NIFTY"
+):
 
     try:
+
+        market_key, config = get_market_config(
+            market
+        )
+
+        exchange = config["exchange"]
+        symbol = config["symbol"]
+        token = config["token"]
 
         api = ensure_session()
 
         response = api.ltpData(
-            EXCHANGE,
-            "NIFTY",
-            NIFTY_TOKEN
+            exchange,
+            symbol,
+            token
         )
 
         if not response:
-            raise Exception("Empty LTP response")
+
+            raise Exception(
+                "Empty LTP response"
+            )
 
         if response.get("status") is not True:
+
             raise Exception(
                 response.get(
                     "message",
-                    "Unable to fetch NIFTY price"
+                    f"Unable to fetch {market_key} price"
                 )
             )
 
-        data = response.get("data") or {}
+        data = (
+            response.get("data") or {}
+        )
 
         return {
+
             "success": True,
-            "symbol": SYMBOL,
-            "exchange": EXCHANGE,
-            "token": NIFTY_TOKEN,
+
+            "market": market_key,
+
+            "symbol": symbol,
+
+            "exchange": exchange,
+
+            "token": token,
+
             "ltp": data.get("ltp"),
+
             "open": data.get("open"),
+
             "high": data.get("high"),
+
             "low": data.get("low"),
+
             "close": data.get("close")
         }
+
+    except HTTPException:
+        raise
 
     except Exception as e:
 
@@ -286,52 +557,95 @@ def market_data():
 # ---------------------------------------------------------
 # ANALYSIS DATA
 # ---------------------------------------------------------
-# Existing strategy.js will perform:
 #
-# HH / HL / LH / LL
-# BOS / CHOCH
-# Fair Value Gap
-# Liquidity Zone
-# Liquidity Sweep
-# Fibonacci Golden Zone
-# Price Range
-# EMA 9 / EMA 21
-# RSI
+# strategy.js performs:
+#
+# MARKET STRUCTURE
+# BOS
+# CHOCH
+# FVG
+# LIQUIDITY
+# ORDER BLOCK
+# BREAKER
+# FIBONACCI
+# EMA
 # VWAP
-# Volume
-# ATR
-# Multi-strategy confirmation
-# BUY / SELL / WAIT
-# Entry
-# Stop Loss
-# Target
-# Confidence
+# RSI
+# MACD
+# STOCHASTIC
+# ADX
+# SUPERTREND
+# ORB
+# PRICE ACTION
+# BREAKOUT
+# BREAKOUT RETEST
+# BOLLINGER
+# ROC
+# MFI
+# WILLIAMS R
+# PREMIUM DISCOUNT
+# ETC.
 #
-# This endpoint supplies live candles to that engine.
+# Backend supplies selected market candles.
+#
 # ---------------------------------------------------------
 
 @app.get("/api/analyze")
-def analyze_data(limit: int = 100):
+def analyze_data(
+
+    limit: int = 100,
+
+    market: str = "NIFTY"
+
+):
 
     try:
 
-        candle_response = get_candles(limit)
+        market_key, config = get_market_config(
+            market
+        )
 
-        candles = candle_response["candles"]
+        candle_response = get_candles(
+
+            limit=limit,
+
+            market=market_key
+
+        )
+
+        candles = (
+            candle_response["candles"]
+        )
 
         if len(candles) < 20:
+
             raise Exception(
                 "Not enough candles for analysis"
             )
 
         return {
+
             "success": True,
-            "symbol": SYMBOL,
+
+            "market": market_key,
+
+            "symbol": config["symbol"],
+
+            "exchange": config["exchange"],
+
+            "token": config["token"],
+
             "timeframe": "5m",
+
             "dataMode": "LIVE",
+
             "engine": "SHIV_AI_TRADING",
+
             "candles": candles
         }
+
+    except HTTPException:
+        raise
 
     except Exception as e:
 
@@ -339,6 +653,45 @@ def analyze_data(limit: int = 100):
             status_code=500,
             detail=str(e)
         )
+
+
+# ---------------------------------------------------------
+# SUPPORTED MARKETS
+# ---------------------------------------------------------
+
+@app.get("/api/markets")
+def supported_markets():
+
+    return {
+
+        "success": True,
+
+        "markets": [
+
+            {
+                "key": "NIFTY",
+                "name": "NIFTY",
+                "exchange": "NSE",
+                "token": "99926000"
+            },
+
+            {
+                "key": "BANKNIFTY",
+                "name": "BANK NIFTY",
+                "exchange": "NSE",
+                "token": "99926009"
+            },
+
+            {
+                "key": "SENSEX",
+                "name": "SENSEX",
+                "exchange": "BSE",
+                "token": "99919000"
+            }
+
+        ]
+
+    }
 
 
 # ---------------------------------------------------------
@@ -350,14 +703,20 @@ if __name__ == "__main__":
     import uvicorn
 
     port = int(
+
         os.getenv(
             "PORT",
             "8000"
         )
+
     )
 
     uvicorn.run(
+
         app,
+
         host="0.0.0.0",
+
         port=port
+
     )
