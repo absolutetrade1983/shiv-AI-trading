@@ -48,7 +48,6 @@
 
         retryTimer: null,
 
-        // ONE TIME FOR ONE COMPLETE ANALYSIS
         signalTime: null
 
     };
@@ -213,6 +212,8 @@
                 setSignalTime(
                     null
                 );
+
+                clearDebugPanel();
 
                 try {
 
@@ -441,10 +442,6 @@
 
         try {
 
-            // ------------------------------------------------
-            // FETCH LIVE CANDLES
-            // ------------------------------------------------
-
             const candles =
                 await getRealMarketData();
 
@@ -457,10 +454,6 @@
             state.lastUpdate =
                 new Date();
 
-            // ------------------------------------------------
-            // ONE SINGLE TIMESTAMP
-            // ------------------------------------------------
-
             const latestCandleTime =
                 getLatestCandleTime(
                     candles
@@ -468,22 +461,6 @@
 
             state.lastCandleTime =
                 latestCandleTime;
-
-            /*
-             * IMPORTANT
-             *
-             * BUY CONFIDENCE
-             * SELL CONFIDENCE
-             * WAIT
-             * BUY CONFIRMATION
-             * SELL CONFIRMATION
-             *
-             * ALL COME FROM THE SAME ANALYSIS.
-             *
-             * THEREFORE:
-             *
-             * ONE ANALYSIS = ONE SIGNAL TIME
-             */
 
             state.signalTime =
                 latestCandleTime;
@@ -500,7 +477,8 @@
 
             const result =
                 ENGINE.analyzeMarket(
-                    state.candles
+                    state.candles,
+                    state.market
                 );
 
             if (
@@ -837,7 +815,7 @@
     }
 
     // ========================================================
-    // FINAL 100% SIGNAL CHECK
+    // FINAL SIGNAL CHECK
     // ========================================================
 
     function isFinalSignal(
@@ -883,21 +861,12 @@
 
         hideError();
 
-        // Make sure Signal Time exists
         ensureSignalTimeElement();
-
-        // ----------------------------------------------------
-        // DECISION
-        // ----------------------------------------------------
 
         setText(
             "decision",
             result.decision
         );
-
-        // ----------------------------------------------------
-        // BOTH CONFIDENCES
-        // ----------------------------------------------------
 
         setText(
             "confidence",
@@ -906,17 +875,9 @@
             )
         );
 
-        // ----------------------------------------------------
-        // ONE SINGLE SIGNAL TIME
-        // ----------------------------------------------------
-
         setSignalTime(
             state.signalTime
         );
-
-        // ----------------------------------------------------
-        // OLD SIGNAL CANDLE ELEMENT
-        // ----------------------------------------------------
 
         setText(
             "signalCandle",
@@ -924,10 +885,6 @@
                 state.signalTime
             )
         );
-
-        // ----------------------------------------------------
-        // TRADE LEVELS
-        // ----------------------------------------------------
 
         setText(
             "entry",
@@ -957,10 +914,6 @@
             )
         );
 
-        // ----------------------------------------------------
-        // STRATEGY SCORES
-        // ----------------------------------------------------
-
         setText(
             "buyScore",
             result.scores &&
@@ -984,10 +937,6 @@
             result.scores &&
             result.scores.sellAgreement
         );
-
-        // ----------------------------------------------------
-        // MARKET ANALYSIS
-        // ----------------------------------------------------
 
         const market =
             result.marketAnalysis ||
@@ -1033,10 +982,6 @@
             market.priceRange
         );
 
-        // ----------------------------------------------------
-        // INDICATORS
-        // ----------------------------------------------------
-
         const indicators =
             result.indicators ||
             {};
@@ -1066,10 +1011,6 @@
             indicators.volumeSignal
         );
 
-        // ----------------------------------------------------
-        // OPTION DATA
-        // ----------------------------------------------------
-
         setText(
             "optionType",
             valueOrDash(
@@ -1090,10 +1031,6 @@
                 result.riskReward
             )
         );
-
-        // ----------------------------------------------------
-        // FINAL SIGNAL TIME
-        // ----------------------------------------------------
 
         if (
             isFinalSignal(
@@ -1117,10 +1054,6 @@
 
         }
 
-        // ----------------------------------------------------
-        // STRATEGY LIST
-        // ----------------------------------------------------
-
         renderStrategies(
             result.strategies &&
             Array.isArray(
@@ -1128,6 +1061,11 @@
             )
                 ? result.strategies.details
                 : []
+        );
+
+        // NEW DEBUG PANEL
+        renderStrategyDebug(
+            result
         );
 
         renderDataSource();
@@ -1160,7 +1098,7 @@
     }
 
     // ========================================================
-    // STRATEGY LIST
+    // ACTIVE STRATEGY LIST
     // ========================================================
 
     function renderStrategies(
@@ -1242,282 +1180,27 @@
     }
 
     // ========================================================
-    // DATA SOURCE
+    // STRATEGY DEBUG PANEL
     // ========================================================
 
-    function renderDataSource() {
+    function ensureDebugPanel() {
 
-        const element =
+        let panel =
             document.getElementById(
-                "dataSource"
+                "strategyDebugPanel"
             );
 
-        if (!element) {
-            return;
+        if (panel) {
+            return panel;
         }
 
-        if (
-            state.dataMode ===
-            "LIVE"
-        ) {
-
-            element.textContent =
-                `LIVE ${getMarketDisplay()} MARKET DATA`;
-
-            element.className =
-                "live";
-
-        } else {
-
-            element.textContent =
-                "LIVE DATA UNAVAILABLE";
-
-            element.className =
-                "test";
-
-        }
-
-    }
-
-    // ========================================================
-    // HTML ESCAPE
-    // ========================================================
-
-    function escapeHTML(
-        value
-    ) {
-
-        return String(value)
-            .replaceAll(
-                "&",
-                "&amp;"
-            )
-            .replaceAll(
-                "<",
-                "&lt;"
-            )
-            .replaceAll(
-                ">",
-                "&gt;"
-            )
-            .replaceAll(
-                '"',
-                "&quot;"
-            )
-            .replaceAll(
-                "'",
-                "&#039;"
+        panel =
+            document.createElement(
+                "div"
             );
 
-    }
+        panel.id =
+            "strategyDebugPanel";
 
-    // ========================================================
-    // AUTO REFRESH
-    // ========================================================
-
-    function scheduleNextAutoRefresh() {
-
-        if (
-            state.autoRefreshTimer
-        ) {
-
-            clearTimeout(
-                state.autoRefreshTimer
-            );
-
-        }
-
-        const now =
-            new Date();
-
-        const minutes =
-            now.getMinutes();
-
-        const seconds =
-            now.getSeconds();
-
-        const milliseconds =
-            now.getMilliseconds();
-
-        let minutesToNext =
-            5 -
-            (
-                minutes % 5
-            );
-
-        if (
-            minutesToNext === 0
-        ) {
-
-            minutesToNext = 5;
-
-        }
-
-        let delay =
-            (
-                minutesToNext *
-                60 *
-                1000
-            ) -
-            (
-                seconds *
-                1000
-            ) -
-            milliseconds;
-
-        // 5 seconds after candle boundary
-        delay += 5000;
-
-        state.autoRefreshTimer =
-            setTimeout(
-                () => {
-
-                    if (
-                        isMarketHours()
-                    ) {
-
-                        runAnalysis(
-                            true
-                        );
-
-                    } else {
-
-                        scheduleNextAutoRefresh();
-
-                    }
-
-                },
-                delay
-            );
-
-    }
-
-    // ========================================================
-    // MARKET HOURS
-    // ========================================================
-
-    function isMarketHours() {
-
-        const now =
-            new Date();
-
-        const day =
-            now.getDay();
-
-        if (
-            day === 0 ||
-            day === 6
-        ) {
-
-            return false;
-
-        }
-
-        const hour =
-            now.getHours();
-
-        const minute =
-            now.getMinutes();
-
-        const totalMinutes =
-            (
-                hour *
-                60
-            ) +
-            minute;
-
-        const marketOpen =
-            (
-                9 *
-                60
-            ) +
-            15;
-
-        const marketClose =
-            (
-                15 *
-                60
-            ) +
-            30;
-
-        return (
-            totalMinutes >=
-                marketOpen &&
-            totalMinutes <
-                marketClose
-        );
-
-    }
-
-    // ========================================================
-    // PUBLIC APP
-    // ========================================================
-
-    window.SHIV_AI_APP = {
-
-        state,
-
-        runAnalysis,
-
-        loadMarketData,
-
-        getRealMarketData
-
-    };
-
-    // ========================================================
-    // INITIALIZE
-    // ========================================================
-
-    function initialize() {
-
-        createMarketSelector();
-
-        // Create Signal Time automatically
-        ensureSignalTimeElement();
-
-        const button =
-            document.getElementById(
-                "runAnalysis"
-            );
-
-        if (button) {
-
-            button.addEventListener(
-                "click",
-                runAnalysis
-            );
-
-        }
-
-        setStatus(
-            "READY"
-        );
-
-        renderDataSource();
-
-        scheduleNextAutoRefresh();
-
-    }
-
-    // ========================================================
-    // START
-    // ========================================================
-
-    if (
-        document.readyState ===
-        "loading"
-    ) {
-
-        document.addEventListener(
-            "DOMContentLoaded",
-            initialize
-        );
-
-    } else {
-
-        initialize();
-
-    }
-
-})();
+        panel.style.cssText = `
+            margin
