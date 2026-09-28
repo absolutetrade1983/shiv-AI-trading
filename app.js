@@ -28,12 +28,16 @@
     // ========================================================
 
     const state = {
-        candles: [],
-        analysis: null,
-        dataMode: "OFFLINE",
-        lastUpdate: null,
-        busy: false
-    };
+    candles: [],
+    analysis: null,
+    dataMode: "OFFLINE",
+    lastUpdate: null,
+    busy: false,
+
+    autoRefreshTimer: null,
+    lastCandleTime: null,
+    retryTimer: null
+};
 
     // ========================================================
     // REAL MARKET DATA
@@ -120,62 +124,96 @@
     // RUN AI ANALYSIS
     // ========================================================
 
-    async function runAnalysis() {
+    async function runAnalysis(isAuto = false) {
 
-        if (state.busy) return;
+    if (state.busy) return;
 
-        state.busy = true;
+    state.busy = true;
 
+    if (!isAuto) {
         hideError();
-
         setButtonState(true);
+    }
+
+    setStatus(
+        isAuto
+            ? "AUTO-UPDATING LIVE DATA..."
+            : "FETCHING LIVE NIFTY DATA..."
+    );
+
+    try {
+
+        const candles =
+            await getRealMarketData();
+
+        state.candles = candles;
+
+        state.dataMode = "LIVE";
+        state.lastUpdate = new Date();
+
+        const newestCandle =
+            candles[candles.length - 1];
+
+        state.lastCandleTime =
+            newestCandle.time ||
+            newestCandle.timestamp ||
+            null;
+
+        renderDataSource();
 
         setStatus(
-            "FETCHING LIVE NIFTY DATA..."
+            "ANALYZING LIVE 5 MIN DATA..."
         );
 
-        try {
+        const result =
+            ENGINE.analyzeMarket(
+                state.candles
+            );
 
-            await loadMarketData();
+        if (
+            !result ||
+            !result.success
+        ) {
+            throw new Error(
+                result && result.error
+                    ? result.error
+                    : "Analysis failed"
+            );
+        }
+
+        state.analysis = result;
+
+        renderAnalysis(result);
+
+        setStatus(
+            isAuto
+                ? "CONNECTED • AUTO LIVE"
+                : "CONNECTED • LIVE DATA"
+        );
+
+        scheduleNextAutoRefresh();
+
+    } catch (error) {
+
+        console.error(
+            "Analysis error:",
+            error
+        );
+
+        /*
+         * Keep the last successful analysis.
+         * Temporary API errors will not erase it.
+         */
+
+        if (state.analysis) {
 
             setStatus(
-                "ANALYZING LIVE 5 MIN DATA..."
+                "LIVE DATA • LAST SUCCESS"
             );
 
-            const result =
-                ENGINE.analyzeMarket(
-                    state.candles
-                );
+            hideError();
 
-            if (
-                !result ||
-                !result.success
-            ) {
-
-                throw new Error(
-                    result && result.error
-                        ? result.error
-                        : "Analysis failed"
-                );
-            }
-
-            state.analysis =
-                result;
-
-            renderAnalysis(
-                result
-            );
-
-            setStatus(
-                "CONNECTED • LIVE DATA"
-            );
-
-        } catch (error) {
-
-            console.error(
-                "Analysis error:",
-                error
-            );
+        } else {
 
             state.dataMode =
                 "OFFLINE";
@@ -183,23 +221,22 @@
             renderDataSource();
 
             setStatus(
-                "ERROR"
-            );
-
-            showError(
-                error.message
-            );
-
-        } finally {
-
-            state.busy =
-                false;
-
-            setButtonState(
-                false
+                "WAITING FOR LIVE DATA"
             );
         }
+
+        scheduleNextAutoRefresh();
+
+    } finally {
+
+        state.busy = false;
+
+        if (!isAuto) {
+            setButtonState(false);
+        }
     }
+}
+    
 
     // ========================================================
     // UI HELPERS
@@ -594,30 +631,104 @@
     }
 
     // ========================================================
-    // INITIAL UI
-    // ========================================================
+// AUTO REFRESH — EVERY 5 MINUTE CANDLE
+// ========================================================
 
-    function initialize() {
+function scheduleNextAutoRefresh() {
 
-        const button =
-            document.getElementById(
-                "runAnalysis"
-            );
-
-        if (button) {
-
-            button.addEventListener(
-                "click",
-                runAnalysis
-            );
-        }
-
-        setStatus(
-            "READY"
+    if (state.autoRefreshTimer) {
+        clearTimeout(
+            state.autoRefreshTimer
         );
-
-        renderDataSource();
     }
+
+    const now = new Date();
+
+    const minutes =
+        now.getMinutes();
+
+    const seconds =
+        now.getSeconds();
+
+    const milliseconds =
+        now.getMilliseconds();
+
+    // Next 5-minute candle boundary
+    let minutesToNext =
+        5 - (minutes % 5);
+
+    if (minutesToNext === 0) {
+        minutesToNext = 5;
+    }
+
+    let delay =
+        (minutesToNext * 60 * 1000) -
+        (seconds * 1000) -
+        milliseconds;
+
+    // Wait a few seconds after candle closes
+    delay += 5000;
+
+    state.autoRefreshTimer =
+        setTimeout(
+            () => {
+
+                if (isMarketHours()) {
+
+                    runAnalysis(true);
+
+                } else {
+
+                    scheduleNextAutoRefresh();
+                }
+
+            },
+            delay
+        );
+}
+
+
+// ========================================================
+// NSE MARKET HOURS
+// 09:15 AM - 03:30 PM
+// Monday - Friday
+// ========================================================
+
+function isMarketHours() {
+
+    const now = new Date();
+
+    const day =
+        now.getDay();
+
+    // Saturday / Sunday
+    if (
+        day === 0 ||
+        day === 6
+    ) {
+        return false;
+    }
+
+    const hour =
+        now.getHours();
+
+    const minute =
+        now.getMinutes();
+
+    const totalMinutes =
+        (hour * 60) + minute;
+
+    const marketOpen =
+        (9 * 60) + 15;
+
+    const marketClose =
+        (15 * 60) + 30;
+
+    return (
+        totalMinutes >= marketOpen &&
+        totalMinutes < marketClose
+    );
+}
 
     // ========================================================
     // PUBLIC APP OBJECT
@@ -633,7 +744,21 @@
 
         getRealMarketData
     };
+function initialize() {
+    const button =
+        document.getElementById("runAnalysis");
 
+    if (button) {
+        button.addEventListener(
+            "click",
+            runAnalysis
+        );
+    }
+
+    setStatus("READY");
+    renderDataSource();
+    scheduleNextAutoRefresh();
+}
     // ========================================================
     // START
     // ========================================================
