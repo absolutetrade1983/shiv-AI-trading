@@ -48,8 +48,9 @@
 
         retryTimer: null,
 
-        // ONE timestamp for the complete analysis
+        // ONE TIME FOR ONE COMPLETE ANALYSIS
         signalTime: null
+
     };
 
     // ========================================================
@@ -147,7 +148,9 @@
             key => {
 
                 const option =
-                    document.createElement("option");
+                    document.createElement(
+                        "option"
+                    );
 
                 option.value =
                     key;
@@ -175,6 +178,7 @@
                         state.market;
 
                     return;
+
                 }
 
                 state.market =
@@ -206,19 +210,15 @@
                     "BUY Confidence: -- | SELL Confidence: --"
                 );
 
-                setText(
-                    "signalTime",
-                    "--"
-                );
-
-                setText(
-                    "signalCandle",
-                    "--"
+                setSignalTime(
+                    null
                 );
 
                 try {
 
-                    await runAnalysis(false);
+                    await runAnalysis(
+                        false
+                    );
 
                 } catch (error) {
 
@@ -232,8 +232,13 @@
             }
         );
 
-        wrapper.appendChild(label);
-        wrapper.appendChild(select);
+        wrapper.appendChild(
+            label
+        );
+
+        wrapper.appendChild(
+            select
+        );
 
         const button =
             document.getElementById(
@@ -259,10 +264,11 @@
         }
 
         return select;
+
     }
 
     // ========================================================
-    // GET REAL MARKET DATA
+    // GET MARKET DATA
     // ========================================================
 
     async function getRealMarketData() {
@@ -280,10 +286,12 @@
                 {
                     method: "GET",
                     cache: "no-store",
+
                     headers: {
                         "Accept":
                             "application/json"
                     }
+
                 }
             );
 
@@ -294,7 +302,7 @@
             data =
                 await response.json();
 
-        } catch (e) {
+        } catch (error) {
 
             throw new Error(
                 "Invalid response from market server"
@@ -342,7 +350,7 @@
     }
 
     // ========================================================
-    // LOAD LIVE MARKET DATA
+    // LOAD MARKET DATA
     // ========================================================
 
     async function loadMarketData() {
@@ -366,7 +374,7 @@
     }
 
     // ========================================================
-    // GET CANDLE TIME
+    // GET LATEST CANDLE TIME
     // ========================================================
 
     function getLatestCandleTime(
@@ -382,19 +390,19 @@
 
         }
 
-        const newestCandle =
+        const candle =
             candles[
                 candles.length - 1
             ];
 
-        if (!newestCandle) {
+        if (!candle) {
             return null;
         }
 
         return (
-            newestCandle.time ||
-            newestCandle.timestamp ||
-            newestCandle.datetime ||
+            candle.time ||
+            candle.timestamp ||
+            candle.datetime ||
             null
         );
 
@@ -434,7 +442,7 @@
         try {
 
             // ------------------------------------------------
-            // GET LIVE CANDLES
+            // FETCH LIVE CANDLES
             // ------------------------------------------------
 
             const candles =
@@ -450,7 +458,7 @@
                 new Date();
 
             // ------------------------------------------------
-            // ONE SINGLE TIME FOR THIS ANALYSIS
+            // ONE SINGLE TIMESTAMP
             // ------------------------------------------------
 
             const latestCandleTime =
@@ -462,17 +470,19 @@
                 latestCandleTime;
 
             /*
-             * IMPORTANT:
+             * IMPORTANT
              *
-             * BUY confidence
-             * SELL confidence
+             * BUY CONFIDENCE
+             * SELL CONFIDENCE
              * WAIT
-             * BUY confirmation
-             * SELL confirmation
+             * BUY CONFIRMATION
+             * SELL CONFIRMATION
              *
-             * ALL belong to this SAME analysis candle.
+             * ALL COME FROM THE SAME ANALYSIS.
              *
-             * Therefore ALL use ONE signalTime.
+             * THEREFORE:
+             *
+             * ONE ANALYSIS = ONE SIGNAL TIME
              */
 
             state.signalTime =
@@ -485,7 +495,7 @@
             );
 
             // ------------------------------------------------
-            // RUN STRATEGY ENGINE
+            // STRATEGY ENGINE
             // ------------------------------------------------
 
             const result =
@@ -511,7 +521,7 @@
                 result;
 
             // ------------------------------------------------
-            // RENDER COMPLETE RESULT
+            // RENDER
             // ------------------------------------------------
 
             renderAnalysis(
@@ -578,111 +588,77 @@
     }
 
     // ========================================================
-    // UI STATUS
+    // SIGNAL TIME UI
     // ========================================================
 
-    function setStatus(
-        text
-    ) {
+    function ensureSignalTimeElement() {
 
-        const el =
+        let timeElement =
             document.getElementById(
-                "engineStatus"
+                "signalTime"
             );
 
-        if (el) {
+        if (timeElement) {
 
-            el.textContent =
-                text;
+            return timeElement;
 
         }
+
+        const confidenceElement =
+            document.getElementById(
+                "confidence"
+            );
+
+        if (!confidenceElement) {
+
+            return null;
+
+        }
+
+        timeElement =
+            document.createElement(
+                "div"
+            );
+
+        timeElement.id =
+            "signalTime";
+
+        timeElement.style.cssText = `
+            margin-top: 10px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #9ca3af;
+            text-align: center;
+            letter-spacing: 0.2px;
+        `;
+
+        confidenceElement.parentElement.appendChild(
+            timeElement
+        );
+
+        return timeElement;
 
     }
 
     // ========================================================
-    // BUTTON
+    // SET SIGNAL TIME
     // ========================================================
 
-    function setButtonState(
-        busy
-    ) {
-
-        const button =
-            document.getElementById(
-                "runAnalysis"
-            );
-
-        if (!button) {
-            return;
-        }
-
-        button.disabled =
-            busy;
-
-        button.textContent =
-            busy
-                ? "ANALYZING..."
-                : "RUN AI ANALYSIS";
-
-    }
-
-    // ========================================================
-    // ERROR
-    // ========================================================
-
-    function showError(
-        message
-    ) {
-
-        const el =
-            document.getElementById(
-                "errorBox"
-            );
-
-        if (el) {
-
-            el.textContent =
-                "Error: " +
-                message;
-
-            el.style.display =
-                "block";
-
-        }
-
-    }
-
-    function hideError() {
-
-        const el =
-            document.getElementById(
-                "errorBox"
-            );
-
-        if (el) {
-
-            el.style.display =
-                "none";
-
-        }
-
-    }
-
-    // ========================================================
-    // VALUE
-    // ========================================================
-
-    function valueOrDash(
+    function setSignalTime(
         value
     ) {
 
-        return (
-            value === null ||
-            value === undefined ||
-            value === ""
-        )
-            ? "--"
-            : value;
+        const element =
+            ensureSignalTimeElement();
+
+        if (!element) {
+            return;
+        }
+
+        element.textContent =
+            value
+                ? `Signal Time: ${formatSignalTime(value)}`
+                : "Signal Time: --";
 
     }
 
@@ -723,7 +699,116 @@
     }
 
     // ========================================================
-    // DIRECTIONAL CONFIDENCE
+    // STATUS
+    // ========================================================
+
+    function setStatus(
+        text
+    ) {
+
+        const element =
+            document.getElementById(
+                "engineStatus"
+            );
+
+        if (element) {
+
+            element.textContent =
+                text;
+
+        }
+
+    }
+
+    // ========================================================
+    // BUTTON STATE
+    // ========================================================
+
+    function setButtonState(
+        busy
+    ) {
+
+        const button =
+            document.getElementById(
+                "runAnalysis"
+            );
+
+        if (!button) {
+            return;
+        }
+
+        button.disabled =
+            busy;
+
+        button.textContent =
+            busy
+                ? "ANALYZING..."
+                : "RUN AI ANALYSIS";
+
+    }
+
+    // ========================================================
+    // ERROR
+    // ========================================================
+
+    function showError(
+        message
+    ) {
+
+        const element =
+            document.getElementById(
+                "errorBox"
+            );
+
+        if (element) {
+
+            element.textContent =
+                "Error: " +
+                message;
+
+            element.style.display =
+                "block";
+
+        }
+
+    }
+
+    function hideError() {
+
+        const element =
+            document.getElementById(
+                "errorBox"
+            );
+
+        if (element) {
+
+            element.style.display =
+                "none";
+
+        }
+
+    }
+
+    // ========================================================
+    // VALUE
+    // ========================================================
+
+    function valueOrDash(
+        value
+    ) {
+
+        return (
+            value === null ||
+            value === undefined ||
+            value === ""
+        )
+            ? "--"
+            : value;
+
+    }
+
+    // ========================================================
+    // CONFIDENCE
     // ========================================================
 
     function getDirectionalConfidence(
@@ -744,13 +829,6 @@
                 result.scores.sell
             ) || 0;
 
-        /*
-         * ALWAYS SHOW BOTH CONFIDENCES.
-         *
-         * Both BUY and SELL are calculated
-         * from the SAME market candle.
-         */
-
         return (
             `BUY Confidence: ${buy}% | ` +
             `SELL Confidence: ${sell}%`
@@ -759,7 +837,7 @@
     }
 
     // ========================================================
-    // FINAL SIGNAL CHECK
+    // FINAL 100% SIGNAL CHECK
     // ========================================================
 
     function isFinalSignal(
@@ -781,12 +859,6 @@
                 result.scores &&
                 result.scores.sell
             ) || 0;
-
-        /*
-         * Final signal means the strategy engine
-         * has selected BUY/SELL and the directional
-         * confidence has reached 100.
-         */
 
         return (
             (
@@ -811,6 +883,9 @@
 
         hideError();
 
+        // Make sure Signal Time exists
+        ensureSignalTimeElement();
+
         // ----------------------------------------------------
         // DECISION
         // ----------------------------------------------------
@@ -832,22 +907,16 @@
         );
 
         // ----------------------------------------------------
-        // ONE SIGNAL TIME
+        // ONE SINGLE SIGNAL TIME
         // ----------------------------------------------------
 
-        setText(
-            "signalTime",
-            formatSignalTime(
-                state.signalTime
-            )
+        setSignalTime(
+            state.signalTime
         );
 
-        /*
-         * signalCandle is kept for compatibility
-         * with existing HTML.
-         *
-         * It uses EXACTLY the same timestamp.
-         */
+        // ----------------------------------------------------
+        // OLD SIGNAL CANDLE ELEMENT
+        // ----------------------------------------------------
 
         setText(
             "signalCandle",
@@ -920,48 +989,48 @@
         // MARKET ANALYSIS
         // ----------------------------------------------------
 
-        const marketAnalysis =
+        const market =
             result.marketAnalysis ||
             {};
 
         setText(
             "trend",
-            marketAnalysis.trend
+            market.trend
         );
 
         setText(
             "structure",
-            marketAnalysis.structure
+            market.structure
         );
 
         setText(
             "bos",
-            marketAnalysis.bos
+            market.bos
         );
 
         setText(
             "choch",
-            marketAnalysis.choch
+            market.choch
         );
 
         setText(
             "fvg",
-            marketAnalysis.fvg
+            market.fvg
         );
 
         setText(
             "liquidity",
-            marketAnalysis.liquidity
+            market.liquidity
         );
 
         setText(
             "fibonacci",
-            marketAnalysis.fibonacci
+            market.fibonacci
         );
 
         setText(
             "priceRange",
-            marketAnalysis.priceRange
+            market.priceRange
         );
 
         // ----------------------------------------------------
@@ -1026,11 +1095,6 @@
         // FINAL SIGNAL TIME
         // ----------------------------------------------------
 
-        /*
-         * If the engine produces a final 100% signal,
-         * the SAME signalTime is used.
-         */
-
         if (
             isFinalSignal(
                 result
@@ -1054,7 +1118,7 @@
         }
 
         // ----------------------------------------------------
-        // STRATEGIES
+        // STRATEGY LIST
         // ----------------------------------------------------
 
         renderStrategies(
@@ -1079,14 +1143,14 @@
         value
     ) {
 
-        const el =
+        const element =
             document.getElementById(
                 id
             );
 
-        if (el) {
+        if (element) {
 
-            el.textContent =
+            element.textContent =
                 valueOrDash(
                     value
                 );
@@ -1183,12 +1247,12 @@
 
     function renderDataSource() {
 
-        const el =
+        const element =
             document.getElementById(
                 "dataSource"
             );
 
-        if (!el) {
+        if (!element) {
             return;
         }
 
@@ -1197,18 +1261,18 @@
             "LIVE"
         ) {
 
-            el.textContent =
+            element.textContent =
                 `LIVE ${getMarketDisplay()} MARKET DATA`;
 
-            el.className =
+            element.className =
                 "live";
 
         } else {
 
-            el.textContent =
+            element.textContent =
                 "LIVE DATA UNAVAILABLE";
 
-            el.className =
+            element.className =
                 "test";
 
         }
@@ -1249,7 +1313,6 @@
 
     // ========================================================
     // AUTO REFRESH
-    // EVERY 5-MINUTE CANDLE
     // ========================================================
 
     function scheduleNextAutoRefresh() {
@@ -1302,7 +1365,7 @@
             ) -
             milliseconds;
 
-        // Wait 5 seconds after candle closes
+        // 5 seconds after candle boundary
         delay += 5000;
 
         state.autoRefreshTimer =
@@ -1387,7 +1450,7 @@
     }
 
     // ========================================================
-    // PUBLIC APP OBJECT
+    // PUBLIC APP
     // ========================================================
 
     window.SHIV_AI_APP = {
@@ -1409,6 +1472,9 @@
     function initialize() {
 
         createMarketSelector();
+
+        // Create Signal Time automatically
+        ensureSignalTimeElement();
 
         const button =
             document.getElementById(
