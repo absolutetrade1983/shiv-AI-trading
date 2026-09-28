@@ -10,9 +10,7 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>
-        SHIV AI TRADING
-    </title>
+    <title>SHIV AI TRADING</title>
 
     <meta
         name="theme-color"
@@ -48,10 +46,6 @@
             padding: 18px 14px 40px;
         }
 
-        /* ====================================================
-           HEADER
-        ==================================================== */
-
         .header {
             text-align: center;
             margin-bottom: 16px;
@@ -71,10 +65,6 @@
             font-weight: 500;
         }
 
-        /* ====================================================
-           STATUS
-        ==================================================== */
-
         .status-bar {
             width: 100%;
             background: #101827;
@@ -91,10 +81,6 @@
             font-weight: 700;
         }
 
-        /* ====================================================
-           DATA SOURCE
-        ==================================================== */
-
         .data-source {
             text-align: center;
             margin: 8px 0 14px;
@@ -110,21 +96,29 @@
             color: #f59e0b;
         }
 
-        /* ====================================================
-           MARKET AREA
-        ==================================================== */
-
         #marketSelectorWrapper {
-            margin-bottom: 10px !important;
+            margin: 12px 0 10px !important;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
         }
 
         #marketSelectorWrapper label {
             color: #ffffff;
+            font-weight: 700;
+            font-size: 14px;
         }
 
-        /* ====================================================
-           BUTTON
-        ==================================================== */
+        #marketSelector {
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid #555;
+            background: #101722;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 700;
+        }
 
         #runAnalysis {
             width: 100%;
@@ -148,10 +142,6 @@
             cursor: wait;
         }
 
-        /* ====================================================
-           ERROR
-        ==================================================== */
-
         #errorBox {
             display: none;
             background: #35151a;
@@ -163,10 +153,6 @@
             font-size: 13px;
             word-break: break-word;
         }
-
-        /* ====================================================
-           CARD
-        ==================================================== */
 
         .card {
             background: #101827;
@@ -181,10 +167,6 @@
             font-size: 17px;
             font-weight: 800;
         }
-
-        /* ====================================================
-           AI DECISION
-        ==================================================== */
 
         .decision-box {
             background: #050c16;
@@ -208,21 +190,12 @@
             line-height: 1.5;
         }
 
-        /*
-         * ONE SINGLE TIME
-         * for BUY + SELL + WAIT
-         */
-
         #signalTime {
             margin-top: 8px;
             color: #9ca3af;
             font-size: 12px;
             font-weight: 700;
         }
-
-        /* ====================================================
-           GRID
-        ==================================================== */
 
         .grid {
             display: grid;
@@ -252,10 +225,6 @@
             word-break: break-word;
         }
 
-        /* ====================================================
-           SCORE COLORS
-        ==================================================== */
-
         #buyScore {
             color: #22c55e;
         }
@@ -264,17 +233,9 @@
             color: #ef476f;
         }
 
-        /* ====================================================
-           MARKET ANALYSIS
-        ==================================================== */
-
         .analysis-value {
             text-transform: uppercase;
         }
-
-        /* ====================================================
-           STRATEGY LIST
-        ==================================================== */
 
         #strategyList {
             display: flex;
@@ -335,10 +296,6 @@
             font-size: 12px;
         }
 
-        /* ====================================================
-           FOOTER
-        ==================================================== */
-
         .footer {
             text-align: center;
             margin-top: 24px;
@@ -346,10 +303,6 @@
             font-size: 10px;
             line-height: 1.5;
         }
-
-        /* ====================================================
-           MOBILE
-        ==================================================== */
 
         @media (max-width: 600px) {
 
@@ -390,10 +343,6 @@
 
         }
 
-        /* ====================================================
-           VERY SMALL PHONES
-        ==================================================== */
-
         @media (max-width: 380px) {
 
             .grid {
@@ -414,10 +363,6 @@
 
 <div class="app">
 
-    <!-- =====================================================
-         HEADER
-    ====================================================== -->
-
     <header class="header">
 
         <h1>
@@ -430,11 +375,6 @@
 
     </header>
 
-
-    <!-- =====================================================
-         ENGINE STATUS
-    ====================================================== -->
-
     <div class="status-bar">
 
         Engine Status:
@@ -444,11 +384,6 @@
 
     </div>
 
-
-    <!-- =====================================================
-         DATA SOURCE
-    ====================================================== -->
-
     <div
         id="dataSource"
         class="data-source test"
@@ -456,18 +391,9 @@
         LIVE DATA UNAVAILABLE
     </div>
 
-
-    <!-- =====================================================
-         MARKET SELECTOR
-         app.js creates the selector here
-    ====================================================== -->
+    <!-- MARKET SELECTOR WILL BE CREATED HERE -->
 
     <div id="marketArea"></div>
-
-
-    <!-- =====================================================
-         RUN BUTTON
-    ====================================================== -->
 
     <button
         id="runAnalysis"
@@ -476,17 +402,7 @@
         RUN AI ANALYSIS
     </button>
 
-
-    <!-- =====================================================
-         ERROR
-    ====================================================== -->
-
     <div id="errorBox"></div>
-
-
-    <!-- =====================================================
-         AI DECISION
-    ====================================================== -->
 
     <section class="card">
 
@@ -500,13 +416,11 @@
                 WAIT
             </div>
 
-            <!-- NO "Confidence:" prefix -->
             <div id="confidence">
                 BUY Confidence: -- |
                 SELL Confidence: --
             </div>
 
-            <!-- ONE SINGLE TIME -->
             <div id="signalTime">
                 Signal Time: --
             </div>
@@ -514,11 +428,6 @@
         </div>
 
     </section>
-
-
-    <!-- =====================================================
-         TRADE LEVELS
-    ====================================================== -->
 
     <section class="card">
 
@@ -529,124 +438,43 @@
         <div class="grid">
 
             <div class="stat">
-
-                <div class="stat-label">
-                    Entry
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="entry"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Entry</div>
+                <div class="stat-value" id="entry">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Stop Loss
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="stopLoss"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Stop Loss</div>
+                <div class="stat-value" id="stopLoss">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Target
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="target"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Target</div>
+                <div class="stat-value" id="target">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    ATR
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="atr"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">ATR</div>
+                <div class="stat-value" id="atr">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Risk / Reward
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="riskReward"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Risk / Reward</div>
+                <div class="stat-value" id="riskReward">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Option Type
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="optionType"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Option Type</div>
+                <div class="stat-value" id="optionType">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Suggested Strike
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="strike"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Suggested Strike</div>
+                <div class="stat-value" id="strike">--</div>
             </div>
 
         </div>
 
     </section>
-
-
-    <!-- =====================================================
-         STRATEGY SCORES
-    ====================================================== -->
 
     <section class="card">
 
@@ -657,76 +485,28 @@
         <div class="grid">
 
             <div class="stat">
-
-                <div class="stat-label">
-                    Buy Score
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="buyScore"
-                >
-                    0
-                </div>
-
+                <div class="stat-label">Buy Score</div>
+                <div class="stat-value" id="buyScore">0</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Sell Score
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="sellScore"
-                >
-                    0
-                </div>
-
+                <div class="stat-label">Sell Score</div>
+                <div class="stat-value" id="sellScore">0</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Buy Agreement
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="buyAgreement"
-                >
-                    0
-                </div>
-
+                <div class="stat-label">Buy Agreement</div>
+                <div class="stat-value" id="buyAgreement">0</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Sell Agreement
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="sellAgreement"
-                >
-                    0
-                </div>
-
+                <div class="stat-label">Sell Agreement</div>
+                <div class="stat-value" id="sellAgreement">0</div>
             </div>
 
         </div>
 
     </section>
-
-
-    <!-- =====================================================
-         MARKET ANALYSIS
-    ====================================================== -->
 
     <section class="card">
 
@@ -737,140 +517,48 @@
         <div class="grid">
 
             <div class="stat">
-
-                <div class="stat-label">
-                    Trend
-                </div>
-
-                <div
-                    class="stat-value analysis-value"
-                    id="trend"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Trend</div>
+                <div class="stat-value analysis-value" id="trend">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Structure
-                </div>
-
-                <div
-                    class="stat-value analysis-value"
-                    id="structure"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Structure</div>
+                <div class="stat-value analysis-value" id="structure">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    BOS
-                </div>
-
-                <div
-                    class="stat-value analysis-value"
-                    id="bos"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">BOS</div>
+                <div class="stat-value analysis-value" id="bos">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    CHOCH
-                </div>
-
-                <div
-                    class="stat-value analysis-value"
-                    id="choch"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">CHOCH</div>
+                <div class="stat-value analysis-value" id="choch">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    FVG
-                </div>
-
-                <div
-                    class="stat-value analysis-value"
-                    id="fvg"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">FVG</div>
+                <div class="stat-value analysis-value" id="fvg">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Liquidity
-                </div>
-
-                <div
-                    class="stat-value analysis-value"
-                    id="liquidity"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Liquidity</div>
+                <div class="stat-value analysis-value" id="liquidity">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Fibonacci
-                </div>
-
-                <div
-                    class="stat-value analysis-value"
-                    id="fibonacci"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Fibonacci</div>
+                <div class="stat-value analysis-value" id="fibonacci">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Price Range
-                </div>
-
-                <div
-                    class="stat-value analysis-value"
-                    id="priceRange"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Price Range</div>
+                <div class="stat-value analysis-value" id="priceRange">--</div>
             </div>
 
         </div>
 
     </section>
-
-
-    <!-- =====================================================
-         INDICATORS
-    ====================================================== -->
 
     <section class="card">
 
@@ -881,92 +569,33 @@
         <div class="grid">
 
             <div class="stat">
-
-                <div class="stat-label">
-                    EMA 9
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="ema9"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">EMA 9</div>
+                <div class="stat-value" id="ema9">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    EMA 21
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="ema21"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">EMA 21</div>
+                <div class="stat-value" id="ema21">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    RSI
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="rsi"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">RSI</div>
+                <div class="stat-value" id="rsi">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    VWAP
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="vwap"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">VWAP</div>
+                <div class="stat-value" id="vwap">--</div>
             </div>
 
-
             <div class="stat">
-
-                <div class="stat-label">
-                    Volume
-                </div>
-
-                <div
-                    class="stat-value"
-                    id="volume"
-                >
-                    --
-                </div>
-
+                <div class="stat-label">Volume</div>
+                <div class="stat-value" id="volume">--</div>
             </div>
 
         </div>
 
     </section>
-
-
-    <!-- =====================================================
-         ACTIVE STRATEGIES
-    ====================================================== -->
 
     <section class="card">
 
@@ -984,11 +613,6 @@
 
     </section>
 
-
-    <!-- =====================================================
-         FOOTER
-    ====================================================== -->
-
     <div class="footer">
 
         SHIV AI TRADING • Strategy Engine v2
@@ -1001,22 +625,62 @@
 
 
 <!-- =========================================================
+     LOAD ERROR DETECTOR
+========================================================= -->
+
+<script>
+
+window.addEventListener(
+    "error",
+    function (event) {
+
+        console.error(
+            "SHIV AI LOAD ERROR:",
+            event.error || event.message
+        );
+
+        const box =
+            document.getElementById(
+                "errorBox"
+            );
+
+        if (box) {
+
+            box.textContent =
+                "Frontend load error: " +
+                (
+                    event.message ||
+                    "JavaScript file failed to load"
+                );
+
+            box.style.display =
+                "block";
+
+        }
+
+    }
+);
+
+</script>
+
+
+<!-- =========================================================
      STRATEGY ENGINE
+     IMPORTANT: LOAD FIRST
 ========================================================= -->
 
 <script
-    src="strategy.js"
-    defer
+    src="strategy.js?v=20260928-1"
 ></script>
 
 
 <!-- =========================================================
      APP CONTROLLER
+     IMPORTANT: LOAD AFTER strategy.js
 ========================================================= -->
 
 <script
-    src="app.js"
-    defer
+    src="app.js?v=20260928-1"
 ></script>
 
 
