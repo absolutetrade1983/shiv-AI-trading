@@ -7,7 +7,7 @@ const SETTINGS = {
     market: "NIFTY",
     timeframe: "5m",
 
-    minimumConfluence: 95,
+    minimumConfluence: 65,
     minimumAgreement: 3,
 
     emaFast: 9,
