@@ -13,6 +13,20 @@
         return;
     }
 
+    // ========================================================
+    // BACKEND API
+    // ========================================================
+
+    const API_BASE =
+        "https://shiv-ai-trading-api.onrender.com";
+
+    const CANDLES_ENDPOINT =
+        `${API_BASE}/api/candles`;
+
+    // ========================================================
+    // APP STATE
+    // ========================================================
+
     const state = {
         candles: [],
         analysis: null,
@@ -28,35 +42,50 @@
     // ========================================================
 
     async function getRealMarketData() {
-        const response = await fetch("/api/nifty-candles", {
-            method: "GET",
-            cache: "no-store",
-            headers: {
-                "Accept": "application/json"
+
+        const response = await fetch(
+            CANDLES_ENDPOINT,
+            {
+                method: "GET",
+                cache: "no-store",
+                headers: {
+                    "Accept": "application/json"
+                }
             }
-        });
+        );
 
         let data = null;
 
         try {
             data = await response.json();
         } catch (e) {
-            throw new Error("Invalid response from market server");
+            throw new Error(
+                "Invalid response from market server"
+            );
         }
 
         if (!response.ok) {
+
             throw new Error(
                 data && data.error
                     ? data.error
+                    : data && data.detail
+                    ? data.detail
                     : "Market data server unavailable"
             );
         }
 
-        if (!data.candles || !Array.isArray(data.candles)) {
-            throw new Error("Invalid market candle data");
+        if (
+            !data.candles ||
+            !Array.isArray(data.candles)
+        ) {
+            throw new Error(
+                "Invalid market candle data"
+            );
         }
 
         if (data.candles.length < 50) {
+
             throw new Error(
                 "Not enough NIFTY 5-minute candles received"
             );
@@ -70,11 +99,17 @@
     // ========================================================
 
     async function loadMarketData() {
-        const candles = await getRealMarketData();
+
+        const candles =
+            await getRealMarketData();
 
         state.candles = candles;
-        state.dataMode = "LIVE";
-        state.lastUpdate = new Date();
+
+        state.dataMode =
+            "LIVE";
+
+        state.lastUpdate =
+            new Date();
 
         renderDataSource();
 
@@ -86,24 +121,37 @@
     // ========================================================
 
     async function runAnalysis() {
+
         if (state.busy) return;
 
         state.busy = true;
 
         hideError();
+
         setButtonState(true);
-        setStatus("FETCHING LIVE NIFTY DATA...");
+
+        setStatus(
+            "FETCHING LIVE NIFTY DATA..."
+        );
 
         try {
+
             await loadMarketData();
 
-            setStatus("ANALYZING LIVE 5 MIN DATA...");
-
-            const result = ENGINE.analyzeMarket(
-                state.candles
+            setStatus(
+                "ANALYZING LIVE 5 MIN DATA..."
             );
 
-            if (!result || !result.success) {
+            const result =
+                ENGINE.analyzeMarket(
+                    state.candles
+                );
+
+            if (
+                !result ||
+                !result.success
+            ) {
+
                 throw new Error(
                     result && result.error
                         ? result.error
@@ -111,25 +159,45 @@
                 );
             }
 
-            state.analysis = result;
+            state.analysis =
+                result;
 
-            renderAnalysis(result);
+            renderAnalysis(
+                result
+            );
 
-            setStatus("CONNECTED • LIVE DATA");
+            setStatus(
+                "CONNECTED • LIVE DATA"
+            );
 
         } catch (error) {
-            console.error("Analysis error:", error);
 
-            state.dataMode = "OFFLINE";
+            console.error(
+                "Analysis error:",
+                error
+            );
+
+            state.dataMode =
+                "OFFLINE";
+
             renderDataSource();
 
-            setStatus("ERROR");
+            setStatus(
+                "ERROR"
+            );
 
-            showError(error.message);
+            showError(
+                error.message
+            );
 
         } finally {
-            state.busy = false;
-            setButtonState(false);
+
+            state.busy =
+                false;
+
+            setButtonState(
+                false
+            );
         }
     }
 
@@ -138,21 +206,29 @@
     // ========================================================
 
     function setStatus(text) {
+
         const el =
-            document.getElementById("engineStatus");
+            document.getElementById(
+                "engineStatus"
+            );
 
         if (el) {
-            el.textContent = text;
+            el.textContent =
+                text;
         }
     }
 
     function setButtonState(busy) {
+
         const button =
-            document.getElementById("runAnalysis");
+            document.getElementById(
+                "runAnalysis"
+            );
 
         if (!button) return;
 
-        button.disabled = busy;
+        button.disabled =
+            busy;
 
         button.textContent =
             busy
@@ -161,27 +237,38 @@
     }
 
     function showError(message) {
+
         const el =
-            document.getElementById("errorBox");
+            document.getElementById(
+                "errorBox"
+            );
 
         if (el) {
-            el.textContent =
-                "Error: " + message;
 
-            el.style.display = "block";
+            el.textContent =
+                "Error: " +
+                message;
+
+            el.style.display =
+                "block";
         }
     }
 
     function hideError() {
+
         const el =
-            document.getElementById("errorBox");
+            document.getElementById(
+                "errorBox"
+            );
 
         if (el) {
-            el.style.display = "none";
+            el.style.display =
+                "none";
         }
     }
 
     function valueOrDash(value) {
+
         return value === null ||
             value === undefined
             ? "--"
@@ -193,6 +280,7 @@
     // ========================================================
 
     function renderAnalysis(result) {
+
         hideError();
 
         setText(
@@ -207,22 +295,30 @@
 
         setText(
             "entry",
-            valueOrDash(result.entry)
+            valueOrDash(
+                result.entry
+            )
         );
 
         setText(
             "stopLoss",
-            valueOrDash(result.stopLoss)
+            valueOrDash(
+                result.stopLoss
+            )
         );
 
         setText(
             "target",
-            valueOrDash(result.target)
+            valueOrDash(
+                result.target
+            )
         );
 
         setText(
             "atr",
-            valueOrDash(result.atr)
+            valueOrDash(
+                result.atr
+            )
         );
 
         setText(
@@ -312,22 +408,30 @@
 
         setText(
             "optionType",
-            valueOrDash(result.optionType)
+            valueOrDash(
+                result.optionType
+            )
         );
 
         setText(
             "strike",
-            valueOrDash(result.suggestedStrike)
+            valueOrDash(
+                result.suggestedStrike
+            )
         );
 
         setText(
             "riskReward",
-            valueOrDash(result.riskReward)
+            valueOrDash(
+                result.riskReward
+            )
         );
 
         renderStrategies(
             result.strategies &&
-            Array.isArray(result.strategies.details)
+            Array.isArray(
+                result.strategies.details
+            )
                 ? result.strategies.details
                 : []
         );
@@ -336,12 +440,18 @@
     }
 
     function setText(id, value) {
+
         const el =
-            document.getElementById(id);
+            document.getElementById(
+                id
+            );
 
         if (el) {
+
             el.textContent =
-                valueOrDash(value);
+                valueOrDash(
+                    value
+                );
         }
     }
 
@@ -349,15 +459,22 @@
     // STRATEGY LIST
     // ========================================================
 
-    function renderStrategies(strategies) {
+    function renderStrategies(
+        strategies
+    ) {
+
         const container =
-            document.getElementById("strategyList");
+            document.getElementById(
+                "strategyList"
+            );
 
         if (!container) return;
 
-        container.innerHTML = "";
+        container.innerHTML =
+            "";
 
         if (!strategies.length) {
+
             container.innerHTML =
                 "<div class='strategy-empty'>" +
                 "No qualifying strategy setup" +
@@ -366,35 +483,51 @@
             return;
         }
 
-        strategies.forEach(strategy => {
-            const item =
-                document.createElement("div");
+        strategies.forEach(
+            strategy => {
 
-            item.className = "strategy-item";
+                const item =
+                    document.createElement(
+                        "div"
+                    );
 
-            item.innerHTML = `
-                <div>
-                    <strong>
-                        ${escapeHTML(strategy.name)}
-                    </strong>
+                item.className =
+                    "strategy-item";
 
-                    <small>
-                        ${escapeHTML(strategy.reason)}
-                    </small>
-                </div>
+                item.innerHTML = `
+                    <div>
+                        <strong>
+                            ${escapeHTML(
+                                strategy.name
+                            )}
+                        </strong>
 
-                <div class="${
-                    strategy.direction === "BUY"
-                        ? "buy"
-                        : "sell"
-                }">
-                    ${escapeHTML(strategy.direction)}
-                    ${escapeHTML(strategy.score)}
-                </div>
-            `;
+                        <small>
+                            ${escapeHTML(
+                                strategy.reason
+                            )}
+                        </small>
+                    </div>
 
-            container.appendChild(item);
-        });
+                    <div class="${
+                        strategy.direction === "BUY"
+                            ? "buy"
+                            : "sell"
+                    }">
+                        ${escapeHTML(
+                            strategy.direction
+                        )}
+                        ${escapeHTML(
+                            strategy.score
+                        )}
+                    </div>
+                `;
+
+                container.appendChild(
+                    item
+                );
+            }
+        );
     }
 
     // ========================================================
@@ -402,22 +535,32 @@
     // ========================================================
 
     function renderDataSource() {
+
         const el =
-            document.getElementById("dataSource");
+            document.getElementById(
+                "dataSource"
+            );
 
         if (!el) return;
 
-        if (state.dataMode === "LIVE") {
+        if (
+            state.dataMode ===
+            "LIVE"
+        ) {
+
             el.textContent =
                 "LIVE MARKET DATA";
 
-            el.className = "live";
+            el.className =
+                "live";
 
         } else {
+
             el.textContent =
                 "LIVE DATA UNAVAILABLE";
 
-            el.className = "test";
+            el.className =
+                "test";
         }
     }
 
@@ -426,12 +569,28 @@
     // ========================================================
 
     function escapeHTML(value) {
+
         return String(value)
-            .replaceAll("&", "&amp;")
-            .replaceAll("<", "&lt;")
-            .replaceAll(">", "&gt;")
-            .replaceAll('"', "&quot;")
-            .replaceAll("'", "&#039;");
+            .replaceAll(
+                "&",
+                "&amp;"
+            )
+            .replaceAll(
+                "<",
+                "&lt;"
+            )
+            .replaceAll(
+                ">",
+                "&gt;"
+            )
+            .replaceAll(
+                '"',
+                "&quot;"
+            )
+            .replaceAll(
+                "'",
+                "&#039;"
+            );
     }
 
     // ========================================================
@@ -439,17 +598,23 @@
     // ========================================================
 
     function initialize() {
+
         const button =
-            document.getElementById("runAnalysis");
+            document.getElementById(
+                "runAnalysis"
+            );
 
         if (button) {
+
             button.addEventListener(
                 "click",
                 runAnalysis
             );
         }
 
-        setStatus("READY");
+        setStatus(
+            "READY"
+        );
 
         renderDataSource();
     }
@@ -459,9 +624,13 @@
     // ========================================================
 
     window.SHIV_AI_APP = {
+
         state,
+
         runAnalysis,
+
         loadMarketData,
+
         getRealMarketData
     };
 
@@ -470,13 +639,17 @@
     // ========================================================
 
     if (
-        document.readyState === "loading"
+        document.readyState ===
+        "loading"
     ) {
+
         document.addEventListener(
             "DOMContentLoaded",
             initialize
         );
+
     } else {
+
         initialize();
     }
 
