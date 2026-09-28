@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
+
     <meta charset="UTF-8">
 
     <meta
@@ -8,735 +10,1016 @@
         content="width=device-width, initial-scale=1.0"
     >
 
-    <title>SHIV AI TRADING</title>
+    <title>
+        SHIV AI TRADING
+    </title>
+
+    <meta
+        name="theme-color"
+        content="#05070b"
+    >
 
     <style>
+
         * {
             box-sizing: border-box;
-            margin: 0;
-            padding: 0;
         }
 
+        html,
         body {
+            margin: 0;
+            padding: 0;
+            background: #05070b;
+            color: #ffffff;
             font-family:
                 Arial,
                 Helvetica,
                 sans-serif;
+        }
 
-            background: #05070b;
-            color: #ffffff;
+        body {
             min-height: 100vh;
         }
 
-        .container {
+        .app {
             width: 100%;
-            max-width: 1100px;
-            margin: auto;
-            padding: 20px;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 18px 14px 40px;
         }
 
-        header {
-            text-align: center;
-            padding: 20px 0 25px;
-        }
+        /* ====================================================
+           HEADER
+        ==================================================== */
 
-        header h1 {
-            font-size: 34px;
-            font-weight: 800;
-            letter-spacing: 1px;
-        }
-
-        header p {
-            margin-top: 8px;
-            color: #9da5b4;
-            font-size: 17px;
-        }
-
-        .status {
-            background: #101827;
-            border: 1px solid #202d43;
-            border-radius: 16px;
-            padding: 18px;
+        .header {
             text-align: center;
             margin-bottom: 16px;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 26px;
+            font-weight: 800;
+            letter-spacing: 0.3px;
+        }
+
+        .subtitle {
+            margin-top: 5px;
+            color: #8f96a3;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        /* ====================================================
+           STATUS
+        ==================================================== */
+
+        .status-bar {
+            width: 100%;
+            background: #101827;
+            border: 1px solid #1e2a3d;
+            border-radius: 10px;
+            padding: 12px;
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 12px;
         }
 
         #engineStatus {
-            color: #25d366;
+            color: #36d399;
             font-weight: 700;
         }
 
-        .source {
+        /* ====================================================
+           DATA SOURCE
+        ==================================================== */
+
+        .data-source {
             text-align: center;
-            margin-bottom: 16px;
-            color: #9da5b4;
-        }
-
-        #dataSource {
+            margin: 8px 0 14px;
+            font-size: 12px;
             font-weight: 700;
         }
 
-        #dataSource.live {
-            color: #25d366;
+        .data-source.live {
+            color: #35d399;
         }
 
-        #dataSource.test {
-            color: #ffb020;
+        .data-source.test {
+            color: #f59e0b;
         }
 
-        button {
+        /* ====================================================
+           MARKET AREA
+        ==================================================== */
+
+        #marketSelectorWrapper {
+            margin-bottom: 10px !important;
+        }
+
+        #marketSelectorWrapper label {
+            color: #ffffff;
+        }
+
+        /* ====================================================
+           BUTTON
+        ==================================================== */
+
+        #runAnalysis {
             width: 100%;
+            min-height: 46px;
             border: none;
-            border-radius: 15px;
-            padding: 18px;
-            font-size: 18px;
+            border-radius: 10px;
+            background: #2864e8;
+            color: #ffffff;
+            font-size: 14px;
             font-weight: 800;
             cursor: pointer;
-            background: #2864e8;
-            color: white;
-            margin-bottom: 18px;
+            margin-bottom: 14px;
         }
 
-        button:disabled {
-            opacity: 0.6;
-            cursor: not-allowed;
+        #runAnalysis:active {
+            transform: scale(0.99);
         }
+
+        #runAnalysis:disabled {
+            opacity: 0.65;
+            cursor: wait;
+        }
+
+        /* ====================================================
+           ERROR
+        ==================================================== */
+
+        #errorBox {
+            display: none;
+            background: #35151a;
+            border: 1px solid #7f2935;
+            color: #ff8f9b;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 14px;
+            font-size: 13px;
+            word-break: break-word;
+        }
+
+        /* ====================================================
+           CARD
+        ==================================================== */
 
         .card {
             background: #101827;
-            border: 1px solid #202d43;
-            border-radius: 18px;
-            padding: 20px;
-            margin-bottom: 18px;
+            border: 1px solid #1d293b;
+            border-radius: 12px;
+            padding: 14px;
+            margin-bottom: 14px;
         }
 
-        .card h2 {
-            font-size: 24px;
-            margin-bottom: 18px;
+        .card-title {
+            margin: 0 0 12px;
+            font-size: 17px;
+            font-weight: 800;
         }
 
-        .decision {
-            background: #080e17;
-            border-radius: 16px;
-            padding: 25px;
+        /* ====================================================
+           AI DECISION
+        ==================================================== */
+
+        .decision-box {
+            background: #050c16;
+            border-radius: 10px;
+            padding: 22px 12px 16px;
             text-align: center;
         }
 
         #decision {
-            font-size: 46px;
+            font-size: 34px;
             font-weight: 900;
-            color: #ffcc00;
+            color: #facc15;
+            line-height: 1.1;
+            margin-bottom: 10px;
         }
 
-        .confidence {
-            margin-top: 8px;
-            color: #c5ccd8;
-            font-size: 19px;
+        #confidence {
+            color: #d7dce5;
+            font-size: 13px;
+            font-weight: 600;
+            line-height: 1.5;
         }
+
+        /*
+         * ONE SINGLE TIME
+         * for BUY + SELL + WAIT
+         */
+
+        #signalTime {
+            margin-top: 8px;
+            color: #9ca3af;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        /* ====================================================
+           GRID
+        ==================================================== */
 
         .grid {
             display: grid;
-            grid-template-columns:
-                repeat(2, minmax(0, 1fr));
-
-            gap: 12px;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
         }
 
-        .box {
-            background: #080e17;
-            border-radius: 14px;
-            padding: 16px;
-            min-height: 85px;
+        .stat {
+            background: #050c16;
+            border-radius: 9px;
+            padding: 12px 10px;
+            min-height: 66px;
         }
 
-        .label {
-            color: #929baa;
-            font-size: 14px;
+        .stat-label {
+            color: #7f8998;
+            font-size: 10px;
             text-transform: uppercase;
-            margin-bottom: 8px;
+            margin-bottom: 7px;
+            letter-spacing: 0.2px;
         }
 
-        .value {
-            font-size: 21px;
+        .stat-value {
+            color: #ffffff;
+            font-size: 15px;
             font-weight: 800;
             word-break: break-word;
         }
 
-        .buy {
-            color: #25d366 !important;
+        /* ====================================================
+           SCORE COLORS
+        ==================================================== */
+
+        #buyScore {
+            color: #22c55e;
         }
 
-        .sell {
-            color: #ff5263 !important;
+        #sellScore {
+            color: #ef476f;
         }
 
-        .neutral {
-            color: #ffcc00;
+        /* ====================================================
+           MARKET ANALYSIS
+        ==================================================== */
+
+        .analysis-value {
+            text-transform: uppercase;
+        }
+
+        /* ====================================================
+           STRATEGY LIST
+        ==================================================== */
+
+        #strategyList {
+            display: flex;
+            flex-direction: column;
+            gap: 7px;
         }
 
         .strategy-item {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            gap: 15px;
+            gap: 10px;
+            background: #050c16;
+            border-radius: 9px;
+            padding: 10px;
+            min-height: 48px;
+        }
 
-            background: #080e17;
-            border-radius: 13px;
-            padding: 14px;
-            margin-bottom: 10px;
+        .strategy-item > div:first-child {
+            min-width: 0;
+            flex: 1;
         }
 
         .strategy-item strong {
             display: block;
-            font-size: 15px;
+            font-size: 12px;
+            color: #ffffff;
         }
 
         .strategy-item small {
             display: block;
-            margin-top: 5px;
-            color: #8993a4;
-            line-height: 1.4;
+            margin-top: 3px;
+            color: #7f8998;
+            font-size: 10px;
+            line-height: 1.3;
+        }
+
+        .strategy-item .buy {
+            color: #22c55e;
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
+        }
+
+        .strategy-item .sell {
+            color: #ef476f;
+            font-size: 11px;
+            font-weight: 800;
+            white-space: nowrap;
         }
 
         .strategy-empty {
-            color: #8993a4;
+            background: #050c16;
+            border-radius: 9px;
+            padding: 15px;
+            color: #7f8998;
             text-align: center;
-            padding: 20px;
+            font-size: 12px;
         }
 
-        .error {
-            display: none;
-            background: #32131a;
-            border: 1px solid #7d2635;
-            color: #ff7585;
-            border-radius: 13px;
-            padding: 15px;
-            margin-bottom: 18px;
-        }
+        /* ====================================================
+           FOOTER
+        ==================================================== */
 
         .footer {
             text-align: center;
-            color: #626b7b;
-            padding: 25px 0;
-            font-size: 13px;
+            margin-top: 24px;
+            color: #555e6d;
+            font-size: 10px;
+            line-height: 1.5;
         }
 
+        /* ====================================================
+           MOBILE
+        ==================================================== */
+
         @media (max-width: 600px) {
-            .container {
-                padding: 14px;
+
+            .app {
+                padding:
+                    16px
+                    14px
+                    32px;
             }
 
-            header h1 {
-                font-size: 29px;
+            .header h1 {
+                font-size: 24px;
             }
 
-            .grid {
-                grid-template-columns: 1fr 1fr;
+            .subtitle {
+                font-size: 12px;
+            }
+
+            .card {
+                padding: 13px;
+            }
+
+            .card-title {
+                font-size: 16px;
             }
 
             #decision {
-                font-size: 38px;
+                font-size: 32px;
             }
+
+            .grid {
+                gap: 8px;
+            }
+
+            .stat {
+                padding: 11px 9px;
+            }
+
         }
+
+        /* ====================================================
+           VERY SMALL PHONES
+        ==================================================== */
+
+        @media (max-width: 380px) {
+
+            .grid {
+                grid-template-columns: 1fr;
+            }
+
+            #decision {
+                font-size: 29px;
+            }
+
+        }
+
     </style>
+
 </head>
 
 <body>
 
-<div class="container">
+<div class="app">
 
-    <!-- HEADER -->
+    <!-- =====================================================
+         HEADER
+    ====================================================== -->
 
-    <header>
-        <h1>SHIV AI TRADING</h1>
+    <header class="header">
 
-        <p>
+        <h1>
+            SHIV AI TRADING
+        </h1>
+
+        <div class="subtitle">
             NIFTY • 5 MIN • MULTI-STRATEGY ENGINE
-        </p>
+        </div>
+
     </header>
 
 
-    <!-- ENGINE STATUS -->
+    <!-- =====================================================
+         ENGINE STATUS
+    ====================================================== -->
 
-    <div class="status">
+    <div class="status-bar">
+
         Engine Status:
         <span id="engineStatus">
             READY
         </span>
+
     </div>
 
 
-    <!-- DATA SOURCE -->
-
-    <div class="source">
-        Data Source:
-        <span id="dataSource">
-            TEST DATA — NOT LIVE
-        </span>
-    </div>
-
-
-    <!-- ERROR -->
+    <!-- =====================================================
+         DATA SOURCE
+    ====================================================== -->
 
     <div
-        id="errorBox"
-        class="error"
-    ></div>
+        id="dataSource"
+        class="data-source test"
+    >
+        LIVE DATA UNAVAILABLE
+    </div>
 
 
-    <!-- RUN -->
+    <!-- =====================================================
+         MARKET SELECTOR
+         app.js creates the selector here
+    ====================================================== -->
 
-    <button id="runAnalysis">
+    <div id="marketArea"></div>
+
+
+    <!-- =====================================================
+         RUN BUTTON
+    ====================================================== -->
+
+    <button
+        id="runAnalysis"
+        type="button"
+    >
         RUN AI ANALYSIS
     </button>
 
 
-    <!-- AI DECISION -->
+    <!-- =====================================================
+         ERROR
+    ====================================================== -->
 
-    <div class="card">
+    <div id="errorBox"></div>
 
-        <h2>AI Decision</h2>
 
-        <div class="decision">
+    <!-- =====================================================
+         AI DECISION
+    ====================================================== -->
+
+    <section class="card">
+
+        <h2 class="card-title">
+            AI Decision
+        </h2>
+
+        <div class="decision-box">
 
             <div id="decision">
                 WAIT
             </div>
 
-            <div class="confidence">
-                Confidence:
-                <strong id="confidence">
-                    0%
-                </strong>
+            <!-- NO "Confidence:" prefix -->
+            <div id="confidence">
+                BUY Confidence: -- |
+                SELL Confidence: --
+            </div>
+
+            <!-- ONE SINGLE TIME -->
+            <div id="signalTime">
+                Signal Time: --
             </div>
 
         </div>
 
-    </div>
+    </section>
 
 
-    <!-- TRADE PLAN -->
+    <!-- =====================================================
+         TRADE LEVELS
+    ====================================================== -->
 
-    <div class="card">
+    <section class="card">
 
-        <h2>Trade Levels</h2>
+        <h2 class="card-title">
+            Trade Levels
+        </h2>
 
         <div class="grid">
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Entry
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="entry"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Stop Loss
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="stopLoss"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Target
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="target"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     ATR
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="atr"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Risk / Reward
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="riskReward"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Option Type
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="optionType"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Suggested Strike
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="strike"
                 >
                     --
                 </div>
+
             </div>
 
         </div>
 
-    </div>
+    </section>
 
 
-    <!-- STRATEGY SCORES -->
+    <!-- =====================================================
+         STRATEGY SCORES
+    ====================================================== -->
 
-    <div class="card">
+    <section class="card">
 
-        <h2>Strategy Scores</h2>
+        <h2 class="card-title">
+            Strategy Scores
+        </h2>
 
         <div class="grid">
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Buy Score
                 </div>
 
                 <div
-                    class="value buy"
+                    class="stat-value"
                     id="buyScore"
                 >
                     0
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Sell Score
                 </div>
 
                 <div
-                    class="value sell"
+                    class="stat-value"
                     id="sellScore"
                 >
                     0
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Buy Agreement
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="buyAgreement"
                 >
                     0
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Sell Agreement
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="sellAgreement"
                 >
                     0
                 </div>
+
             </div>
 
         </div>
 
-    </div>
+    </section>
 
 
-    <!-- MARKET ANALYSIS -->
+    <!-- =====================================================
+         MARKET ANALYSIS
+    ====================================================== -->
 
-    <div class="card">
+    <section class="card">
 
-        <h2>Market Analysis</h2>
+        <h2 class="card-title">
+            Market Analysis
+        </h2>
 
         <div class="grid">
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Trend
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value analysis-value"
                     id="trend"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Structure
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value analysis-value"
                     id="structure"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     BOS
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value analysis-value"
                     id="bos"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     CHOCH
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value analysis-value"
                     id="choch"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     FVG
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value analysis-value"
                     id="fvg"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Liquidity
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value analysis-value"
                     id="liquidity"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Fibonacci
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value analysis-value"
                     id="fibonacci"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Price Range
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value analysis-value"
                     id="priceRange"
                 >
                     --
                 </div>
+
             </div>
 
         </div>
 
-    </div>
+    </section>
 
 
-    <!-- INDICATORS -->
+    <!-- =====================================================
+         INDICATORS
+    ====================================================== -->
 
-    <div class="card">
+    <section class="card">
 
-        <h2>Indicators</h2>
+        <h2 class="card-title">
+            Indicators
+        </h2>
 
         <div class="grid">
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     EMA 9
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="ema9"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     EMA 21
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="ema21"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     RSI
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="rsi"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     VWAP
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="vwap"
                 >
                     --
                 </div>
+
             </div>
 
 
-            <div class="box">
-                <div class="label">
+            <div class="stat">
+
+                <div class="stat-label">
                     Volume
                 </div>
 
                 <div
-                    class="value"
+                    class="stat-value"
                     id="volume"
                 >
                     --
                 </div>
+
             </div>
 
         </div>
 
-    </div>
+    </section>
 
 
-    <!-- STRATEGIES -->
+    <!-- =====================================================
+         ACTIVE STRATEGIES
+    ====================================================== -->
 
-    <div class="card">
+    <section class="card">
 
-        <h2>
+        <h2 class="card-title">
             Active Strategy Signals
         </h2>
 
         <div id="strategyList">
 
             <div class="strategy-empty">
-                Run analysis to see
-                strategy confirmations.
+                No qualifying strategy setup
             </div>
 
         </div>
 
-    </div>
+    </section>
 
 
-    <!-- FOOTER -->
+    <!-- =====================================================
+         FOOTER
+    ====================================================== -->
 
     <div class="footer">
-        SHIV AI TRADING •
-        Strategy Engine v2
+
+        SHIV AI TRADING • Strategy Engine v2
         <br>
         Paper / Testing Mode
+
     </div>
 
 </div>
 
 
-<!-- IMPORTANT:
-     strategy.js MUST LOAD BEFORE app.js
--->
+<!-- =========================================================
+     STRATEGY ENGINE
+========================================================= -->
 
-<script src="strategy.js"></script>
-<script src="app.js"></script>
+<script
+    src="strategy.js"
+    defer
+></script>
+
+
+<!-- =========================================================
+     APP CONTROLLER
+========================================================= -->
+
+<script
+    src="app.js"
+    defer
+></script>
+
 
 </body>
+
 </html>
