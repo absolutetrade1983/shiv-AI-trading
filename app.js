@@ -5,10 +5,6 @@
 (() => {
     "use strict";
 
-    // ========================================================
-    // CONFIG
-    // ========================================================
-
     const API_BASE =
         "https://shiv-ai-trading-api.onrender.com";
 
@@ -52,6 +48,19 @@
     }
 
 
+    function currentTime() {
+
+        return new Date().toLocaleTimeString(
+            "en-IN",
+            {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit"
+            }
+        );
+    }
+
+
     // ========================================================
     // DECISION
     // ========================================================
@@ -70,6 +79,7 @@
             .trim()
             .toUpperCase();
 
+
         if (
             value.includes("BUY") ||
             value === "LONG"
@@ -77,12 +87,14 @@
             return "BUY";
         }
 
+
         if (
             value.includes("SELL") ||
             value === "SHORT"
         ) {
             return "SELL";
         }
+
 
         return "WAIT";
     }
@@ -94,7 +106,7 @@
 
     function getBuyScore(result) {
 
-        const candidates = [
+        const values = [
 
             result?.scores?.buyConfidence,
             result?.scores?.buy,
@@ -108,13 +120,12 @@
             result?.buyPercent,
 
             result?.analysis?.buyConfidence,
-            result?.analysis?.buyScore,
-
-            result?.confidence?.buy
+            result?.analysis?.buyScore
 
         ];
 
-        for (const value of candidates) {
+
+        for (const value of values) {
 
             const n = Number(value);
 
@@ -126,6 +137,7 @@
             }
         }
 
+
         return 0;
     }
 
@@ -136,7 +148,7 @@
 
     function getSellScore(result) {
 
-        const candidates = [
+        const values = [
 
             result?.scores?.sellConfidence,
             result?.scores?.sell,
@@ -150,13 +162,12 @@
             result?.sellPercent,
 
             result?.analysis?.sellConfidence,
-            result?.analysis?.sellScore,
-
-            result?.confidence?.sell
+            result?.analysis?.sellScore
 
         ];
 
-        for (const value of candidates) {
+
+        for (const value of values) {
 
             const n = Number(value);
 
@@ -167,6 +178,7 @@
                 return n;
             }
         }
+
 
         return 0;
     }
@@ -178,16 +190,13 @@
 
     function getConfidence(result) {
 
-        const candidates = [
+        const values = [
 
             result?.confidence,
-
             result?.confluence,
-
             result?.confidenceScore,
 
             result?.scores?.confidence,
-
             result?.scores?.confluence,
 
             result?.finalConfidence,
@@ -198,7 +207,8 @@
 
         ];
 
-        for (const value of candidates) {
+
+        for (const value of values) {
 
             const n = Number(value);
 
@@ -210,29 +220,13 @@
             }
         }
 
+
         return 0;
     }
 
 
     // ========================================================
-    // TIME
-    // ========================================================
-
-    function formatTime() {
-
-        return new Date().toLocaleTimeString(
-            "en-IN",
-            {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit"
-            }
-        );
-    }
-
-
-    // ========================================================
-    // CREATE APP
+    // CREATE UI
     // ========================================================
 
     function createApp() {
@@ -240,6 +234,7 @@
         document.body.innerHTML = `
 
         <div id="shivApp">
+
 
             <!-- HEADER -->
 
@@ -305,7 +300,7 @@
                 </section>
 
 
-                <!-- MARKET CARD -->
+                <!-- MARKET INFO -->
 
                 <section class="market-card">
 
@@ -368,6 +363,7 @@
 
                 <section class="decision-card">
 
+
                     <div class="decision-label">
                         AI DECISION
                     </div>
@@ -382,13 +378,45 @@
                     </div>
 
 
-                    <div
-                        id="confidence"
-                        class="confidence">
+                    <!-- CONFIDENCE + TIME -->
 
-                        Confidence --
+                    <div class="decision-info">
+
+
+                        <div>
+
+                            <span>
+                                CONFIDENCE
+                            </span>
+
+                            <strong
+                                id="confidence">
+
+                                0%
+
+                            </strong>
+
+                        </div>
+
+
+                        <div>
+
+                            <span>
+                                TIME
+                            </span>
+
+                            <strong
+                                id="decisionTime">
+
+                                --
+
+                            </strong>
+
+                        </div>
+
 
                     </div>
+
 
                 </section>
 
@@ -409,7 +437,7 @@
                             id="buyPercent"
                             class="percent-value">
 
-                            --
+                            0%
 
                         </div>
 
@@ -427,9 +455,38 @@
                             id="sellPercent"
                             class="percent-value">
 
-                            --
+                            0%
 
                         </div>
+
+                    </div>
+
+
+                </section>
+
+
+                <!-- RUN ANALYSIS -->
+
+                <section class="analysis-control">
+
+
+                    <button
+                        id="runAnalysis"
+                        class="run-btn">
+
+                        ▶ RUN ANALYSIS
+
+                    </button>
+
+
+                    <div class="auto-status">
+
+                        <span
+                            id="autoDot"
+                            class="auto-dot">
+                        </span>
+
+                        AUTO • 30 SEC
 
                     </div>
 
@@ -516,9 +573,9 @@
                 </section>
 
 
-                <!-- PREMIUM TRADE PLAN -->
+                <!-- PREMIUM PLAN -->
 
-                <section class="section-card premium-card">
+                <section class="section-card">
 
 
                     <div class="section-title">
@@ -659,9 +716,12 @@
 
         `;
 
+
         injectStyles();
 
         setupMarketButtons();
+
+        setupRunButton();
 
         loadMarket();
     }
@@ -686,11 +746,15 @@
 
         html,
         body {
+
             margin: 0;
             padding: 0;
             min-height: 100%;
+
             background: #080b12;
+
             color: #f5f7fb;
+
             font-family:
                 Inter,
                 system-ui,
@@ -707,6 +771,7 @@
 
 
         #shivApp {
+
             min-height: 100vh;
 
             background:
@@ -735,7 +800,7 @@
                 1px solid #202738;
 
             background:
-                rgba(8, 11, 18, 0.92);
+                rgba(8,11,18,.94);
 
             position: sticky;
 
@@ -803,7 +868,6 @@
         .live-dot {
 
             width: 8px;
-
             height: 8px;
 
             border-radius: 50%;
@@ -819,7 +883,7 @@
         .container {
 
             width:
-                min(720px, 100%);
+                min(720px,100%);
 
             margin: 0 auto;
 
@@ -828,12 +892,14 @@
         }
 
 
+        /* MARKET BUTTONS */
+
         .market-selector {
 
             display: grid;
 
             grid-template-columns:
-                repeat(3, 1fr);
+                repeat(3,1fr);
 
             gap: 8px;
 
@@ -858,8 +924,6 @@
 
             font-weight: 800;
 
-            letter-spacing: .5px;
-
             cursor: pointer;
         }
 
@@ -874,6 +938,8 @@
         }
 
 
+        /* COMMON CARDS */
+
         .market-card,
         .decision-card,
         .section-card,
@@ -883,7 +949,7 @@
                 1px solid #20283a;
 
             background:
-                rgba(15, 20, 31, .88);
+                rgba(15,20,31,.88);
 
             border-radius: 18px;
 
@@ -892,6 +958,8 @@
                 rgba(0,0,0,.22);
         }
 
+
+        /* MARKET */
 
         .market-card {
 
@@ -950,11 +1018,14 @@
         }
 
 
+        /* DECISION */
+
         .decision-card {
 
             text-align: center;
 
-            padding: 22px 15px;
+            padding:
+                22px 15px 18px;
 
             margin-bottom: 12px;
         }
@@ -980,35 +1051,75 @@
 
             letter-spacing: 2px;
 
-            margin: 6px 0;
+            margin: 6px 0 10px;
         }
 
 
         .decision.buy {
-
             color: #55e39b;
         }
 
 
         .decision.sell {
-
             color: #ff6d7d;
         }
 
 
         .decision.wait {
-
             color: #f3c85b;
         }
 
 
-        .confidence {
+        /* CONFIDENCE + TIME */
 
-            color: #8c97aa;
+        .decision-info {
 
-            font-size: 11px;
+            display: flex;
+
+            justify-content: center;
+
+            gap: 34px;
+
+            border-top:
+                1px solid #20283a;
+
+            padding-top: 12px;
         }
 
+
+        .decision-info div {
+
+            display: flex;
+
+            flex-direction: column;
+
+            gap: 4px;
+        }
+
+
+        .decision-info span {
+
+            font-size: 8px;
+
+            color: #69758b;
+
+            font-weight: 800;
+
+            letter-spacing: 1px;
+        }
+
+
+        .decision-info strong {
+
+            font-size: 13px;
+
+            color: #dce2ec;
+
+            font-weight: 800;
+        }
+
+
+        /* BUY SELL */
 
         .percent-grid {
 
@@ -1063,6 +1174,94 @@
         }
 
 
+        /* RUN ANALYSIS */
+
+        .analysis-control {
+
+            text-align: center;
+
+            margin:
+                4px 0 14px;
+        }
+
+
+        .run-btn {
+
+            width: 100%;
+
+            border:
+                1px solid #3c4962;
+
+            background:
+                linear-gradient(
+                    180deg,
+                    #222d43,
+                    #151d2d
+                );
+
+            color: #ffffff;
+
+            border-radius: 13px;
+
+            padding: 14px;
+
+            font-size: 12px;
+
+            font-weight: 900;
+
+            letter-spacing: 1px;
+
+            cursor: pointer;
+        }
+
+
+        .run-btn:active {
+
+            transform:
+                scale(.985);
+        }
+
+
+        .run-btn.loading {
+
+            opacity: .65;
+
+            pointer-events: none;
+        }
+
+
+        .auto-status {
+
+            margin-top: 8px;
+
+            color: #69758b;
+
+            font-size: 9px;
+
+            font-weight: 800;
+
+            letter-spacing: 1px;
+        }
+
+
+        .auto-dot {
+
+            display: inline-block;
+
+            width: 6px;
+
+            height: 6px;
+
+            border-radius: 50%;
+
+            background: #63e6a5;
+
+            margin-right: 5px;
+        }
+
+
+        /* SECTION */
+
         .section-card {
 
             padding: 18px;
@@ -1084,6 +1283,8 @@
             margin-bottom: 18px;
         }
 
+
+        /* OPTION */
 
         .option-main {
 
@@ -1131,11 +1332,7 @@
         }
 
 
-        .premium-card {
-
-            padding-bottom: 20px;
-        }
-
+        /* PREMIUM */
 
         .price-grid {
 
@@ -1189,7 +1386,7 @@
             display: grid;
 
             grid-template-columns:
-                repeat(3, 1fr);
+                repeat(3,1fr);
 
             gap: 10px;
 
@@ -1207,6 +1404,8 @@
         }
 
 
+        /* STATUS */
+
         .status {
 
             text-align: center;
@@ -1220,6 +1419,8 @@
             padding: 10px 0;
         }
 
+
+        /* FOOTER */
 
         .footer {
 
@@ -1236,11 +1437,14 @@
 
             letter-spacing: 1px;
 
-            padding: 12px 3px;
+            padding:
+                12px 3px;
         }
 
 
-        @media (max-width: 450px) {
+        /* MOBILE */
+
+        @media (max-width:450px) {
 
             .market-card {
 
@@ -1249,7 +1453,7 @@
             }
 
 
-            .time-box {
+            .market-card > div:last-child {
 
                 grid-column:
                     1 / -1;
@@ -1304,6 +1508,7 @@
                         const market =
                             button.dataset.market;
 
+
                         if (!market) {
                             return;
                         }
@@ -1337,6 +1542,24 @@
                 );
 
             });
+    }
+
+
+    // ========================================================
+    // RUN BUTTON
+    // ========================================================
+
+    function setupRunButton() {
+
+        $("runAnalysis")
+            .addEventListener(
+                "click",
+                () => {
+
+                    loadMarket(true);
+
+                }
+            );
     }
 
 
@@ -1587,6 +1810,11 @@
             `decision ${decision.toLowerCase()}`;
 
 
+        $("confidence")
+            .textContent =
+            percent(confidence);
+
+
         $("buyPercent")
             .textContent =
             percent(buy);
@@ -1597,11 +1825,9 @@
             percent(sell);
 
 
-        $("confidence")
+        $("decisionTime")
             .textContent =
-            `Confidence ${percent(
-                confidence
-            )}`;
+            currentTime();
 
 
         return decision;
@@ -1617,34 +1843,26 @@
         $("optionType")
             .textContent = "--";
 
-
         $("optionStrike")
             .textContent = "--";
-
 
         $("optionExpiry")
             .textContent = "--";
 
-
         $("optionSymbol")
             .textContent = "--";
-
 
         $("premiumEntry")
             .textContent = "--";
 
-
         $("premiumSL")
             .textContent = "--";
-
 
         $("target1")
             .textContent = "--";
 
-
         $("target2")
             .textContent = "--";
-
 
         $("target3")
             .textContent = "--";
@@ -1745,10 +1963,12 @@
 
 
     // ========================================================
-    // MAIN LOAD
+    // MAIN ANALYSIS
     // ========================================================
 
-    async function loadMarket() {
+    async function loadMarket(
+        manual = false
+    ) {
 
         if (busy) {
             return;
@@ -1758,15 +1978,29 @@
         busy = true;
 
 
+        const button =
+            $("runAnalysis");
+
+
+        if (manual && button) {
+
+            button.classList
+                .add("loading");
+
+            button.textContent =
+                "⟳ ANALYZING...";
+        }
+
+
         $("status")
             .textContent =
-            `Updating ${selectedMarket}...`;
+            `Analyzing ${selectedMarket}...`;
 
 
         try {
 
             // ----------------------------------------------
-            // LIVE CANDLES + SPOT
+            // GET LIVE DATA
             // ----------------------------------------------
 
             const [
@@ -1787,7 +2021,7 @@
 
 
             // ----------------------------------------------
-            // SHIV AI ENGINE
+            // RUN EXISTING SHIV AI ENGINE
             // ----------------------------------------------
 
             const result =
@@ -1802,6 +2036,10 @@
             );
 
 
+            // ----------------------------------------------
+            // DECISION / SCORES
+            // ----------------------------------------------
+
             const decision =
                 renderDecision(
                     result
@@ -1809,7 +2047,7 @@
 
 
             // ----------------------------------------------
-            // LIVE OPTION
+            // OPTION
             // ----------------------------------------------
 
             if (
@@ -1819,7 +2057,7 @@
 
                 $("status")
                     .textContent =
-                    `Getting live ${decision} option...`;
+                    `Loading live ${decision} option...`;
 
 
                 const option =
@@ -1841,7 +2079,7 @@
 
             $("updatedTime")
                 .textContent =
-                formatTime();
+                currentTime();
 
 
             $("status")
@@ -1858,14 +2096,24 @@
 
             $("status")
                 .textContent =
-                `Connection error: ${
+                `Error: ${
                     error?.message ||
-                    "Unknown error"
+                    "Unable to analyze"
                 }`;
 
         } finally {
 
             busy = false;
+
+
+            if (manual && button) {
+
+                button.classList
+                    .remove("loading");
+
+                button.textContent =
+                    "▶ RUN ANALYSIS";
+            }
         }
     }
 
@@ -1886,7 +2134,11 @@
 
         refreshTimer =
             setInterval(
-                loadMarket,
+                () => {
+
+                    loadMarket(false);
+
+                },
                 REFRESH_MS
             );
     }
