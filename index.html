@@ -391,8 +391,6 @@
         LIVE DATA UNAVAILABLE
     </div>
 
-    <!-- MARKET SELECTOR WILL BE CREATED HERE -->
-
     <div id="marketArea"></div>
 
     <button
@@ -625,7 +623,7 @@
 
 
 <!-- =========================================================
-     LOAD ERROR DETECTOR
+     FRONTEND ERROR DETECTOR
 ========================================================= -->
 
 <script>
@@ -666,21 +664,21 @@ window.addEventListener(
 
 <!-- =========================================================
      STRATEGY ENGINE
-     IMPORTANT: LOAD FIRST
+     MUST LOAD BEFORE APP CONTROLLER
 ========================================================= -->
 
 <script
-    src="strategy.js?v=20260928-1"
+    src="strategy.js?v=20260929-2"
 ></script>
 
 
 <!-- =========================================================
      APP CONTROLLER
-     IMPORTANT: LOAD AFTER strategy.js
+     MUST LOAD AFTER STRATEGY ENGINE
 ========================================================= -->
 
 <script
-    src="app.js?v=20260928-1"
+    src="app.js?v=20260929-2"
 ></script>
 
 
