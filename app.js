@@ -1,668 +1,328 @@
-// ============================================================
-// SHIV AI TRADING — MASTER APP CONTROLLER
-// NIFTY | BANK NIFTY | SENSEX
-// 5 MIN | LIVE ANGEL ONE DATA
-// ============================================================
+// ========================================================
+// SHIV AI TRADING — FRONTEND APP
+// NIFTY / BANKNIFTY / SENSEX
+// Live candles + Strategy Engine
+// ========================================================
 
-(function () {
-
+(() => {
     "use strict";
 
-    const ENGINE = window.SHIV_AI_STRATEGY;
-
-    if (!ENGINE) {
-        console.error("Strategy engine not loaded.");
-        return;
-    }
-
-    // ========================================================
-    // BACKEND API
-    // ========================================================
+    // ====================================================
+    // CONFIG
+    // ====================================================
 
     const API_BASE =
         "https://shiv-ai-trading-api.onrender.com";
 
-    const CANDLES_ENDPOINT =
-        `${API_BASE}/api/candles`;
+    const CANDLE_LIMIT = 100;
+    const REFRESH_MS = 30000;
 
-    // ========================================================
-    // APP STATE
-    // ========================================================
+    const MARKETS = [
+        "NIFTY",
+        "BANKNIFTY",
+        "SENSEX"
+    ];
 
     const state = {
-
+        market: "NIFTY",
         candles: [],
         analysis: null,
-
-        dataMode: "OFFLINE",
-
-        lastUpdate: null,
-
         busy: false,
-
-        market: "NIFTY",
-
-        autoRefreshTimer: null,
-
-        lastCandleTime: null,
-
-        retryTimer: null,
-
-        signalTime: null
-
+        timer: null,
+        firstRun: false
     };
 
-    // ========================================================
-    // MARKET CONFIG
-    // ========================================================
 
-    const MARKETS = {
+    // ====================================================
+    // DOM HELPERS
+    // ====================================================
 
-        NIFTY: {
-            name: "NIFTY",
-            display: "NIFTY"
-        },
-
-        BANKNIFTY: {
-            name: "BANKNIFTY",
-            display: "BANK NIFTY"
-        },
-
-        SENSEX: {
-            name: "SENSEX",
-            display: "SENSEX"
-        }
-
-    };
-
-    // ========================================================
-    // MARKET DISPLAY
-    // ========================================================
-
-    function getMarketDisplay() {
-
-        return MARKETS[state.market]
-            ? MARKETS[state.market].display
-            : state.market;
-
+    function $(id) {
+        return document.getElementById(id);
     }
 
-    // ========================================================
+    function setText(id, value) {
+        const el = $(id);
+
+        if (!el) return;
+
+        if (
+            value === undefined ||
+            value === null ||
+            value === ""
+        ) {
+            el.textContent = "--";
+        } else {
+            el.textContent = String(value);
+        }
+    }
+
+    function showError(message) {
+        const box = $("errorBox");
+
+        if (!box) return;
+
+        box.textContent = message;
+        box.style.display = "block";
+    }
+
+    function hideError() {
+        const box = $("errorBox");
+
+        if (!box) return;
+
+        box.textContent = "";
+        box.style.display = "none";
+    }
+
+    function setStatus(text, type = "normal") {
+        const el = $("engineStatus");
+
+        if (!el) return;
+
+        el.textContent = text;
+
+        if (type === "error") {
+            el.style.color = "#ff5252";
+        } else if (type === "success") {
+            el.style.color = "#00e676";
+        } else if (type === "warning") {
+            el.style.color = "#ffca28";
+        } else {
+            el.style.color = "";
+        }
+    }
+
+    function escapeHTML(value) {
+        return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+
+    // ====================================================
+    // ENGINE CHECK
+    // ====================================================
+
+    function getEngine() {
+
+        const engine =
+            window.SHIV_AI_STRATEGY;
+
+        if (!engine) {
+            throw new Error(
+                "Strategy engine load nahi hua. strategy.js check karo."
+            );
+        }
+
+        if (
+            typeof engine.analyzeMarket !==
+            "function"
+        ) {
+            throw new Error(
+                "Strategy engine mila, lekin analyzeMarket() missing hai."
+            );
+        }
+
+        return engine;
+    }
+
+
+    // ====================================================
     // MARKET SELECTOR
-    // ========================================================
+    // ====================================================
 
     function createMarketSelector() {
 
-        let existing =
-            document.getElementById(
-                "marketSelector"
-            );
+        const area = $("marketArea");
 
-        if (existing) {
-            return existing;
-        }
+        if (!area) return;
+
+        area.innerHTML = "";
 
         const wrapper =
             document.createElement("div");
 
-        wrapper.id =
-            "marketSelectorWrapper";
-
         wrapper.style.cssText = `
-            margin: 12px 0;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            flex-wrap: wrap;
+            display:flex;
+            align-items:center;
+            gap:10px;
+            margin-bottom:12px;
+            flex-wrap:wrap;
         `;
 
         const label =
-            document.createElement("label");
+            document.createElement("span");
 
-        label.textContent =
-            "MARKET";
+        label.textContent = "MARKET";
 
         label.style.cssText = `
-            font-weight: 700;
-            font-size: 14px;
+            font-weight:700;
+            font-size:13px;
+            opacity:.8;
         `;
 
         const select =
             document.createElement("select");
 
-        select.id =
-            "marketSelector";
+        select.id = "marketSelector";
 
         select.style.cssText = `
-            padding: 10px 14px;
-            border-radius: 8px;
-            border: 1px solid #555;
-            background: #101722;
-            color: #fff;
-            font-size: 14px;
-            font-weight: 700;
+            background:#111827;
+            color:#fff;
+            border:1px solid #374151;
+            border-radius:8px;
+            padding:8px 12px;
+            font-weight:700;
+            outline:none;
         `;
 
-        Object.keys(MARKETS).forEach(
-            key => {
+        MARKETS.forEach(market => {
 
-                const option =
-                    document.createElement(
-                        "option"
-                    );
+            const option =
+                document.createElement("option");
 
-                option.value =
-                    key;
+            option.value = market;
+            option.textContent = market;
 
-                option.textContent =
-                    MARKETS[key].display;
-
-                select.appendChild(
-                    option
-                );
-
+            if (market === state.market) {
+                option.selected = true;
             }
-        );
 
-        select.value =
-            state.market;
+            select.appendChild(option);
+        });
 
         select.addEventListener(
             "change",
-            async function () {
-
-                if (state.busy) {
-
-                    select.value =
-                        state.market;
-
-                    return;
-
-                }
+            () => {
 
                 state.market =
                     select.value;
 
-                state.analysis =
-                    null;
+                clearRefreshTimer();
 
-                state.candles =
-                    [];
-
-                state.lastCandleTime =
-                    null;
-
-                state.signalTime =
-                    null;
-
-                setStatus(
-                    `SWITCHING TO ${getMarketDisplay()}...`
-                );
-
-                setText(
-                    "decision",
-                    "WAIT"
-                );
-
-                setText(
-                    "confidence",
-                    "BUY Confidence: -- | SELL Confidence: --"
-                );
-
-                setSignalTime(
-                    null
-                );
-
-                clearDebugPanel();
-
-                try {
-
-                    await runAnalysis(
-                        false
-                    );
-
-                } catch (error) {
-
-                    console.error(
-                        "Market switch error:",
-                        error
-                    );
-
-                }
-
+                runAnalysis(true);
             }
         );
 
-        wrapper.appendChild(
-            label
-        );
+        wrapper.appendChild(label);
+        wrapper.appendChild(select);
 
-        wrapper.appendChild(
-            select
-        );
-
-        const button =
-            document.getElementById(
-                "runAnalysis"
-            );
-
-        if (
-            button &&
-            button.parentElement
-        ) {
-
-            button.parentElement.insertBefore(
-                wrapper,
-                button
-            );
-
-        } else {
-
-            document.body.prepend(
-                wrapper
-            );
-
-        }
-
-        return select;
-
+        area.appendChild(wrapper);
     }
 
-    // ========================================================
-    // GET MARKET DATA
-    // ========================================================
 
-    async function getRealMarketData() {
+    // ====================================================
+    // API
+    // ====================================================
+
+    async function fetchCandles() {
 
         const url =
-            `${CANDLES_ENDPOINT}` +
-            `?market=${encodeURIComponent(
+            `${API_BASE}/api/candles?market=${encodeURIComponent(
                 state.market
-            )}` +
-            `&limit=100`;
+            )}&limit=${CANDLE_LIMIT}`;
 
         const response =
-            await fetch(
-                url,
-                {
-                    method: "GET",
-                    cache: "no-store",
-
-                    headers: {
-                        "Accept":
-                            "application/json"
-                    }
-
-                }
-            );
-
-        let data = null;
-
-        try {
-
-            data =
-                await response.json();
-
-        } catch (error) {
-
-            throw new Error(
-                "Invalid response from market server"
-            );
-
-        }
+            await fetch(url, {
+                method: "GET",
+                cache: "no-store"
+            });
 
         if (!response.ok) {
 
             throw new Error(
-                data && data.error
-                    ? data.error
-                    : data && data.detail
-                    ? data.detail
-                    : "Market data server unavailable"
+                `API Error ${response.status}: ${response.statusText}`
             );
-
         }
 
-        if (
-            !data.candles ||
-            !Array.isArray(
-                data.candles
-            )
+        const data =
+            await response.json();
+
+        let candles = null;
+
+        // -----------------------------------------------
+        // Different possible backend response formats
+        // -----------------------------------------------
+
+        if (Array.isArray(data)) {
+            candles = data;
+        } else if (
+            data &&
+            Array.isArray(data.candles)
         ) {
+            candles = data.candles;
+        } else if (
+            data &&
+            Array.isArray(data.data)
+        ) {
+            candles = data.data;
+        } else if (
+            data &&
+            data.data &&
+            Array.isArray(data.data.candles)
+        ) {
+            candles = data.data.candles;
+        }
+
+        if (!candles) {
 
             throw new Error(
-                "Invalid market candle data"
+                "API response me candles nahi mile."
             );
-
         }
 
-        if (
-            data.candles.length < 50
-        ) {
+        if (candles.length < 50) {
 
             throw new Error(
-                `Not enough ${getMarketDisplay()} 5-minute candles received`
+                `Sirf ${candles.length} candles mile. Engine ko minimum 50 candles chahiye.`
             );
-
         }
 
-        return data.candles;
-
+        return candles;
     }
 
-    // ========================================================
-    // LOAD MARKET DATA
-    // ========================================================
 
-    async function loadMarketData() {
+    // ====================================================
+    // FORMATTERS
+    // ====================================================
 
-        const candles =
-            await getRealMarketData();
+    function number(value, decimals = 2) {
 
-        state.candles =
-            candles;
+        const n = Number(value);
 
-        state.dataMode =
-            "LIVE";
-
-        state.lastUpdate =
-            new Date();
-
-        renderDataSource();
-
-        return true;
-
-    }
-
-    // ========================================================
-    // GET LATEST CANDLE TIME
-    // ========================================================
-
-    function getLatestCandleTime(
-        candles
-    ) {
-
-        if (
-            !candles ||
-            !candles.length
-        ) {
-
-            return null;
-
-        }
-
-        const candle =
-            candles[
-                candles.length - 1
-            ];
-
-        if (!candle) {
-            return null;
-        }
-
-        return (
-            candle.time ||
-            candle.timestamp ||
-            candle.datetime ||
-            null
-        );
-
-    }
-
-    // ========================================================
-    // RUN AI ANALYSIS
-    // ========================================================
-
-    async function runAnalysis(
-        isAuto = false
-    ) {
-
-        if (state.busy) {
-            return;
-        }
-
-        state.busy =
-            true;
-
-        if (!isAuto) {
-
-            hideError();
-
-            setButtonState(
-                true
-            );
-
-        }
-
-        setStatus(
-            isAuto
-                ? `AUTO-UPDATING ${getMarketDisplay()}...`
-                : `FETCHING LIVE ${getMarketDisplay()} DATA...`
-        );
-
-        try {
-
-            const candles =
-                await getRealMarketData();
-
-            state.candles =
-                candles;
-
-            state.dataMode =
-                "LIVE";
-
-            state.lastUpdate =
-                new Date();
-
-            const latestCandleTime =
-                getLatestCandleTime(
-                    candles
-                );
-
-            state.lastCandleTime =
-                latestCandleTime;
-
-            state.signalTime =
-                latestCandleTime;
-
-            renderDataSource();
-
-            setStatus(
-                `ANALYZING LIVE ${getMarketDisplay()} 5 MIN DATA...`
-            );
-
-            // ------------------------------------------------
-            // STRATEGY ENGINE
-            // ------------------------------------------------
-
-            const result =
-                ENGINE.analyzeMarket(
-                    state.candles,
-                    state.market
-                );
-
-            if (
-                !result ||
-                !result.success
-            ) {
-
-                throw new Error(
-                    result &&
-                    result.error
-                        ? result.error
-                        : "Analysis failed"
-                );
-
-            }
-
-            state.analysis =
-                result;
-
-            // ------------------------------------------------
-            // RENDER
-            // ------------------------------------------------
-
-            renderAnalysis(
-                result
-            );
-
-            setStatus(
-                isAuto
-                    ? `CONNECTED • ${getMarketDisplay()} • AUTO LIVE`
-                    : `CONNECTED • ${getMarketDisplay()} • LIVE DATA`
-            );
-
-            scheduleNextAutoRefresh();
-
-        } catch (error) {
-
-            console.error(
-                "Analysis error:",
-                error
-            );
-
-            if (state.analysis) {
-
-                setStatus(
-                    `${getMarketDisplay()} • LIVE DATA • LAST SUCCESS`
-                );
-
-                hideError();
-
-            } else {
-
-                state.dataMode =
-                    "OFFLINE";
-
-                renderDataSource();
-
-                setStatus(
-                    "WAITING FOR LIVE DATA"
-                );
-
-                showError(
-                    error.message
-                );
-
-            }
-
-            scheduleNextAutoRefresh();
-
-        } finally {
-
-            state.busy =
-                false;
-
-            if (!isAuto) {
-
-                setButtonState(
-                    false
-                );
-
-            }
-
-        }
-
-    }
-
-    // ========================================================
-    // SIGNAL TIME UI
-    // ========================================================
-
-    function ensureSignalTimeElement() {
-
-        let timeElement =
-            document.getElementById(
-                "signalTime"
-            );
-
-        if (timeElement) {
-
-            return timeElement;
-
-        }
-
-        const confidenceElement =
-            document.getElementById(
-                "confidence"
-            );
-
-        if (!confidenceElement) {
-
-            return null;
-
-        }
-
-        timeElement =
-            document.createElement(
-                "div"
-            );
-
-        timeElement.id =
-            "signalTime";
-
-        timeElement.style.cssText = `
-            margin-top: 10px;
-            font-size: 13px;
-            font-weight: 700;
-            color: #9ca3af;
-            text-align: center;
-            letter-spacing: 0.2px;
-        `;
-
-        confidenceElement.parentElement.appendChild(
-            timeElement
-        );
-
-        return timeElement;
-
-    }
-
-    // ========================================================
-    // SET SIGNAL TIME
-    // ========================================================
-
-    function setSignalTime(
-        value
-    ) {
-
-        const element =
-            ensureSignalTimeElement();
-
-        if (!element) {
-            return;
-        }
-
-        element.textContent =
-            value
-                ? `Signal Time: ${formatSignalTime(value)}`
-                : "Signal Time: --";
-
-    }
-
-    // ========================================================
-    // FORMAT SIGNAL TIME
-    // ========================================================
-
-    function formatSignalTime(
-        value
-    ) {
-
-        if (!value) {
+        if (!Number.isFinite(n)) {
             return "--";
         }
+
+        return n.toFixed(decimals);
+    }
+
+
+    function percentage(value) {
+
+        const n = Number(value);
+
+        if (!Number.isFinite(n)) {
+            return "--";
+        }
+
+        return `${n.toFixed(1)}%`;
+    }
+
+
+    function formatTime(value) {
+
+        if (!value) return "--";
 
         const date =
             new Date(value);
 
-        if (
-            Number.isNaN(
-                date.getTime()
-            )
-        ) {
-
+        if (Number.isNaN(date.getTime())) {
             return String(value);
-
         }
 
         return date.toLocaleTimeString(
@@ -670,518 +330,479 @@
             {
                 hour: "2-digit",
                 minute: "2-digit",
-                hour12: true
+                second: "2-digit"
             }
         );
-
     }
 
-    // ========================================================
-    // STATUS
-    // ========================================================
 
-    function setStatus(
-        text
-    ) {
+    // ====================================================
+    // MAIN ANALYSIS
+    // ====================================================
 
-        const element =
-            document.getElementById(
-                "engineStatus"
-            );
+    async function runAnalysis(isAuto = false) {
 
-        if (element) {
+        if (state.busy) return;
 
-            element.textContent =
-                text;
-
-        }
-
-    }
-
-    // ========================================================
-    // BUTTON STATE
-    // ========================================================
-
-    function setButtonState(
-        busy
-    ) {
-
-        const button =
-            document.getElementById(
-                "runAnalysis"
-            );
-
-        if (!button) {
-            return;
-        }
-
-        button.disabled =
-            busy;
-
-        button.textContent =
-            busy
-                ? "ANALYZING..."
-                : "RUN AI ANALYSIS";
-
-    }
-
-    // ========================================================
-    // ERROR
-    // ========================================================
-
-    function showError(
-        message
-    ) {
-
-        const element =
-            document.getElementById(
-                "errorBox"
-            );
-
-        if (element) {
-
-            element.textContent =
-                "Error: " +
-                message;
-
-            element.style.display =
-                "block";
-
-        }
-
-    }
-
-    function hideError() {
-
-        const element =
-            document.getElementById(
-                "errorBox"
-            );
-
-        if (element) {
-
-            element.style.display =
-                "none";
-
-        }
-
-    }
-
-    // ========================================================
-    // VALUE
-    // ========================================================
-
-    function valueOrDash(
-        value
-    ) {
-
-        return (
-            value === null ||
-            value === undefined ||
-            value === ""
-        )
-            ? "--"
-            : value;
-
-    }
-
-    // ========================================================
-    // CONFIDENCE
-    // ========================================================
-
-    function getDirectionalConfidence(
-        result
-    ) {
-
-        const buy =
-            Number(
-                result &&
-                result.scores &&
-                result.scores.buy
-            ) || 0;
-
-        const sell =
-            Number(
-                result &&
-                result.scores &&
-                result.scores.sell
-            ) || 0;
-
-        return (
-            `BUY Confidence: ${buy}% | ` +
-            `SELL Confidence: ${sell}%`
-        );
-
-    }
-
-    // ========================================================
-    // FINAL SIGNAL CHECK
-    // ========================================================
-
-    function isFinalSignal(
-        result
-    ) {
-
-        if (!result) {
-            return false;
-        }
-
-        const buy =
-            Number(
-                result.scores &&
-                result.scores.buy
-            ) || 0;
-
-        const sell =
-            Number(
-                result.scores &&
-                result.scores.sell
-            ) || 0;
-
-        return (
-            (
-                result.decision === "BUY" &&
-                buy >= 100
-            ) ||
-            (
-                result.decision === "SELL" &&
-                sell >= 100
-            )
-        );
-
-    }
-
-    // ========================================================
-    // RENDER ANALYSIS
-    // ========================================================
-
-    function renderAnalysis(
-        result
-    ) {
+        state.busy = true;
 
         hideError();
 
-        ensureSignalTimeElement();
+        setStatus(
+            "ENGINE RUNNING...",
+            "warning"
+        );
+
+        try {
+
+            // --------------------------------------------
+            // STEP 1 — Engine
+            // --------------------------------------------
+
+            const engine =
+                getEngine();
+
+            // --------------------------------------------
+            // STEP 2 — Candles
+            // --------------------------------------------
+
+            setText(
+                "dataSource",
+                "Loading live Angel One data..."
+            );
+
+            const candles =
+                await fetchCandles();
+
+            state.candles =
+                candles;
+
+            // --------------------------------------------
+            // STEP 3 — Strategy Engine
+            // --------------------------------------------
+
+            const result =
+                engine.analyzeMarket(
+                    candles,
+                    state.market
+                );
+
+            if (!result) {
+
+                throw new Error(
+                    "Strategy engine ne koi result return nahi kiya."
+                );
+            }
+
+            if (result.success === false) {
+
+                throw new Error(
+                    result.error ||
+                    "Strategy analysis failed."
+                );
+            }
+
+            state.analysis =
+                result;
+
+            state.firstRun = true;
+
+            // --------------------------------------------
+            // STEP 4 — Render
+            // --------------------------------------------
+
+            renderAnalysis(result);
+
+            setStatus(
+                "ENGINE ACTIVE",
+                "success"
+            );
+
+            setText(
+                "dataSource",
+                `LIVE ANGEL ONE • ${state.market} • ${candles.length} candles`
+            );
+
+        } catch (error) {
+
+            console.error(
+                "SHIV AI ERROR:",
+                error
+            );
+
+            setStatus(
+                "ENGINE ERROR",
+                "error"
+            );
+
+            showError(
+                error?.message ||
+                "Unknown frontend error."
+            );
+
+        } finally {
+
+            state.busy = false;
+
+            scheduleRefresh();
+        }
+    }
+
+
+    // ====================================================
+    // RENDER COMPLETE ANALYSIS
+    // ====================================================
+
+    function renderAnalysis(result) {
+
+        renderDecision(result);
+
+        renderTradePlan(result);
+
+        renderScores(result);
+
+        renderMarketAnalysis(result);
+
+        renderIndicators(result);
+
+        renderStrategies(result);
+
+        renderDebugPanel(result);
+    }
+
+
+    // ====================================================
+    // DECISION
+    // ====================================================
+
+    function renderDecision(result) {
+
+        const decision =
+            String(
+                result.decision ||
+                "WAIT"
+            ).toUpperCase();
 
         setText(
             "decision",
-            result.decision
+            decision
         );
+
+        const decisionEl =
+            $("decision");
+
+        if (decisionEl) {
+
+            if (decision === "BUY") {
+
+                decisionEl.style.color =
+                    "#00e676";
+
+            } else if (
+                decision === "SELL"
+            ) {
+
+                decisionEl.style.color =
+                    "#ff5252";
+
+            } else {
+
+                decisionEl.style.color =
+                    "#ffca28";
+            }
+        }
 
         setText(
             "confidence",
-            getDirectionalConfidence(
-                result
+            percentage(
+                result.confidence
             )
-        );
-
-        setSignalTime(
-            state.signalTime
         );
 
         setText(
-            "signalCandle",
-            formatSignalTime(
-                state.signalTime
+            "signalTime",
+            formatTime(
+                result.signalTime ||
+                result.timestamp
             )
         );
+    }
+
+
+    // ====================================================
+    // TRADE PLAN
+    // ====================================================
+
+    function renderTradePlan(result) {
 
         setText(
             "entry",
-            valueOrDash(
-                result.entry
-            )
+            number(result.entry)
         );
 
         setText(
             "stopLoss",
-            valueOrDash(
-                result.stopLoss
-            )
+            number(result.stopLoss)
         );
 
         setText(
             "target",
-            valueOrDash(
-                result.target
-            )
+            number(result.target)
         );
 
         setText(
             "atr",
-            valueOrDash(
-                result.atr
+            number(result.atr)
+        );
+
+        setText(
+            "riskReward",
+            result.riskReward !== undefined
+                ? `1:${number(result.riskReward)}`
+                : "--"
+        );
+
+        setText(
+            "optionType",
+            result.optionType || "--"
+        );
+
+        setText(
+            "strike",
+            result.suggestedStrike || "--"
+        );
+    }
+
+
+    // ====================================================
+    // SCORES
+    // ====================================================
+
+    function renderScores(result) {
+
+        const scores =
+            result.scores || {};
+
+        setText(
+            "buyScore",
+            percentage(
+                scores.buy ??
+                result.buyConfidence
             )
         );
 
         setText(
-            "buyScore",
-            result.scores &&
-            result.scores.buy
-        );
-
-        setText(
             "sellScore",
-            result.scores &&
-            result.scores.sell
+            percentage(
+                scores.sell ??
+                result.sellConfidence
+            )
         );
 
         setText(
             "buyAgreement",
-            result.scores &&
-            result.scores.buyAgreement
+            scores.buyAgreement ?? "--"
         );
 
         setText(
             "sellAgreement",
-            result.scores &&
-            result.scores.sellAgreement
+            scores.sellAgreement ?? "--"
         );
+    }
 
-        const market =
+
+    // ====================================================
+    // MARKET ANALYSIS
+    // ====================================================
+
+    function renderMarketAnalysis(result) {
+
+        const m =
             result.marketAnalysis ||
             {};
 
         setText(
             "trend",
-            market.trend
+            m.trend
         );
 
         setText(
             "structure",
-            market.structure
+            m.structure
         );
 
         setText(
             "bos",
-            market.bos
+            m.bos
         );
 
         setText(
             "choch",
-            market.choch
+            m.choch
         );
 
         setText(
             "fvg",
-            market.fvg
+            m.fvg
         );
 
         setText(
             "liquidity",
-            market.liquidity
+            m.liquidity
         );
 
         setText(
             "fibonacci",
-            market.fibonacci
+            m.fibonacci
         );
 
         setText(
             "priceRange",
-            market.priceRange
+            m.priceRange
         );
+    }
 
-        const indicators =
+
+    // ====================================================
+    // INDICATORS
+    // ====================================================
+
+    function renderIndicators(result) {
+
+        const i =
             result.indicators ||
             {};
 
         setText(
             "ema9",
-            indicators.ema9
+            number(i.ema9)
         );
 
         setText(
             "ema21",
-            indicators.ema21
+            number(i.ema21)
         );
 
         setText(
             "rsi",
-            indicators.rsi
+            number(i.rsi)
         );
 
         setText(
             "vwap",
-            indicators.vwap
+            number(i.vwap)
         );
 
         setText(
             "volume",
-            indicators.volumeSignal
+            number(i.volume)
         );
-
-        setText(
-            "optionType",
-            valueOrDash(
-                result.optionType
-            )
-        );
-
-        setText(
-            "strike",
-            valueOrDash(
-                result.suggestedStrike
-            )
-        );
-
-        setText(
-            "riskReward",
-            valueOrDash(
-                result.riskReward
-            )
-        );
-
-        if (
-            isFinalSignal(
-                result
-            )
-        ) {
-
-            setText(
-                "finalSignalTime",
-                formatSignalTime(
-                    state.signalTime
-                )
-            );
-
-        } else {
-
-            setText(
-                "finalSignalTime",
-                "--"
-            );
-
-        }
-
-        renderStrategies(
-            result.strategies &&
-            Array.isArray(
-                result.strategies.details
-            )
-                ? result.strategies.details
-                : []
-        );
-
-        // NEW DEBUG PANEL
-        renderStrategyDebug(
-            result
-        );
-
-        renderDataSource();
-
     }
 
-    // ========================================================
-    // SET TEXT
-    // ========================================================
 
-    function setText(
-        id,
-        value
-    ) {
+    // ====================================================
+    // STRATEGY SIGNALS
+    // ====================================================
 
-        const element =
-            document.getElementById(
-                id
-            );
-
-        if (element) {
-
-            element.textContent =
-                valueOrDash(
-                    value
-                );
-
-        }
-
-    }
-
-    // ========================================================
-    // ACTIVE STRATEGY LIST
-    // ========================================================
-
-    function renderStrategies(
-        strategies
-    ) {
+    function renderStrategies(result) {
 
         const container =
-            document.getElementById(
-                "strategyList"
-            );
+            $("strategyList");
 
-        if (!container) {
+        if (!container) return;
+
+        const strategies =
+            result.strategies || {};
+
+        const details =
+            Array.isArray(
+                strategies.details
+            )
+                ? strategies.details
+                : [];
+
+        if (!details.length) {
+
+            container.innerHTML = `
+                <div style="
+                    padding:12px;
+                    opacity:.7;
+                ">
+                    No active strategy signal on current candle.
+                    <br>
+                    Background filters are still being calculated.
+                </div>
+            `;
+
             return;
         }
 
         container.innerHTML =
-            "";
+            details.map((s, index) => {
 
-        if (
-            !strategies.length
-        ) {
+                const direction =
+                    String(
+                        s.direction ||
+                        "NEUTRAL"
+                    ).toUpperCase();
 
-            container.innerHTML =
-                "<div class='strategy-empty'>" +
-                "No qualifying strategy setup" +
-                "</div>";
+                let color =
+                    "#9ca3af";
 
-            return;
+                if (direction === "BUY") {
+                    color = "#00e676";
+                }
 
-        }
+                if (direction === "SELL") {
+                    color = "#ff5252";
+                }
 
-        strategies.forEach(
-            strategy => {
+                return `
+                    <div style="
+                        display:flex;
+                        justify-content:space-between;
+                        align-items:center;
+                        gap:10px;
+                        padding:10px 0;
+                        border-bottom:1px solid rgba(255,255,255,.08);
+                    ">
 
-                const item =
-                    document.createElement(
-                        "div"
-                    );
+                        <div>
+                            <strong>
+                                ${index + 1}. 
+                                ${escapeHTML(s.name || "Strategy")}
+                            </strong>
 
-                item.className =
-                    "strategy-item";
+                            <div style="
+                                font-size:12px;
+                                opacity:.7;
+                                margin-top:3px;
+                            ">
+                                ${escapeHTML(s.reason || "")}
+                            </div>
+                        </div>
 
-                item.innerHTML = `
-                    <div>
-                        <strong>
-                            ${escapeHTML(
-                                strategy.name
-                            )}
-                        </strong>
+                        <div style="
+                            color:${color};
+                            font-weight:800;
+                            white-space:nowrap;
+                        ">
+                            ${escapeHTML(direction)}
+                            ${s.score !== undefined
+                                ? ` • ${number(s.score, 0)}`
+                                : ""}
+                        </div>
 
-                        <small>
-                            ${escapeHTML(
-                                strategy.reason
-                            )}
-                        </small>
-                    </div>
-
-                    <div class="${
-                        strategy.direction === "BUY"
-                            ? "buy"
-                            : "sell"
-                    }">
-                        ${escapeHTML(
-                            strategy.direction
-                        )}
-                        ${escapeHTML(
-                            strategy.score
-                        )}
                     </div>
                 `;
-
-                container.appendChild(
-                    item
-                );
-
-            }
-        );
-
+            }).join("");
     }
 
-    // ========================================================
-    // STRATEGY DEBUG PANEL
-    // ========================================================
+
+    // ====================================================
+    // DEBUG PANEL
+    // Shows ALL strategy groups considered by engine
+    // ====================================================
 
     function ensureDebugPanel() {
 
@@ -1203,4 +824,485 @@
             "strategyDebugPanel";
 
         panel.style.cssText = `
-            margin
+            margin-top:20px;
+            padding:16px;
+            border:1px solid rgba(255,255,255,.12);
+            border-radius:12px;
+            background:rgba(255,255,255,.03);
+        `;
+
+        const anchor =
+            $("strategyList");
+
+        if (
+            anchor &&
+            anchor.parentElement
+        ) {
+
+            anchor.parentElement.appendChild(
+                panel
+            );
+
+        } else {
+
+            document.body.appendChild(
+                panel
+            );
+        }
+
+        return panel;
+    }
+
+
+    function renderDebugPanel(result) {
+
+        const panel =
+            ensureDebugPanel();
+
+        const scores =
+            result.scores || {};
+
+        const market =
+            result.marketAnalysis || {};
+
+        const strategies =
+            result.strategies || {};
+
+        const buyGroups =
+            Array.isArray(
+                scores.buyGroups
+            )
+                ? scores.buyGroups
+                : [];
+
+        const sellGroups =
+            Array.isArray(
+                scores.sellGroups
+            )
+                ? scores.sellGroups
+                : [];
+
+        const buy =
+            Array.isArray(
+                strategies.buy
+            )
+                ? strategies.buy
+                : [];
+
+        const sell =
+            Array.isArray(
+                strategies.sell
+            )
+                ? strategies.sell
+                : [];
+
+        const groupNames = [
+            "STRUCTURE",
+            "SMC",
+            "TREND",
+            "MOMENTUM",
+            "BREAKOUT"
+        ];
+
+        function groupHTML(
+            title,
+            items,
+            color
+        ) {
+
+            return `
+                <div style="
+                    flex:1;
+                    min-width:250px;
+                ">
+
+                    <div style="
+                        font-weight:800;
+                        color:${color};
+                        margin-bottom:8px;
+                    ">
+                        ${title}
+                    </div>
+
+                    ${
+                        items.length
+                            ? items.map(
+                                item => `
+                                    <div style="
+                                        padding:5px 0;
+                                        font-size:12px;
+                                    ">
+                                        ✓ ${escapeHTML(item)}
+                                    </div>
+                                `
+                            ).join("")
+                            : `
+                                <div style="
+                                    opacity:.45;
+                                    font-size:12px;
+                                ">
+                                    No active signal
+                                </div>
+                            `
+                    }
+
+                </div>
+            `;
+        }
+
+
+        panel.innerHTML = `
+
+            <div style="
+                font-size:16px;
+                font-weight:900;
+                margin-bottom:14px;
+            ">
+                STRATEGY ENGINE DEBUG
+            </div>
+
+            <div style="
+                font-size:12px;
+                opacity:.65;
+                margin-bottom:15px;
+            ">
+                All strategy modules are evaluated by
+                strategy.js. Only strategies producing a
+                current signal appear as active.
+            </div>
+
+            <div style="
+                display:flex;
+                flex-wrap:wrap;
+                gap:20px;
+                margin-bottom:18px;
+            ">
+
+                ${groupHTML(
+                    "BUY GROUPS",
+                    buyGroups,
+                    "#00e676"
+                )}
+
+                ${groupHTML(
+                    "SELL GROUPS",
+                    sellGroups,
+                    "#ff5252"
+                )}
+
+            </div>
+
+            <div style="
+                display:flex;
+                flex-wrap:wrap;
+                gap:20px;
+                margin-bottom:18px;
+            ">
+
+                ${groupHTML(
+                    "BUY STRATEGIES",
+                    buy,
+                    "#00e676"
+                )}
+
+                ${groupHTML(
+                    "SELL STRATEGIES",
+                    sell,
+                    "#ff5252"
+                )}
+
+            </div>
+
+            <div style="
+                border-top:1px solid rgba(255,255,255,.08);
+                padding-top:14px;
+                font-size:12px;
+                line-height:1.8;
+            ">
+
+                <strong>ENGINE MODULES</strong>
+
+                <div style="
+                    display:flex;
+                    flex-wrap:wrap;
+                    gap:7px;
+                    margin-top:8px;
+                ">
+
+                    ${groupNames.map(
+                        name => `
+                            <span style="
+                                padding:4px 8px;
+                                border-radius:6px;
+                                background:rgba(255,255,255,.06);
+                            ">
+                                ${name}
+                            </span>
+                        `
+                    ).join("")}
+
+                </div>
+
+            </div>
+
+            <div style="
+                border-top:1px solid rgba(255,255,255,.08);
+                margin-top:14px;
+                padding-top:14px;
+                font-size:12px;
+                line-height:1.8;
+            ">
+
+                <div>
+                    <strong>Order Block:</strong>
+                    ${escapeHTML(market.orderBlock || "--")}
+                </div>
+
+                <div>
+                    <strong>Breaker Block:</strong>
+                    ${escapeHTML(market.breakerBlock || "--")}
+                </div>
+
+                <div>
+                    <strong>Equal High/Low:</strong>
+                    ${escapeHTML(market.equalHighLow || "--")}
+                </div>
+
+                <div>
+                    <strong>Premium/Discount:</strong>
+                    ${escapeHTML(market.premiumDiscount || "--")}
+                </div>
+
+                <div>
+                    <strong>Breakout Retest:</strong>
+                    ${escapeHTML(market.breakoutRetest || "--")}
+                </div>
+
+                <div>
+                    <strong>ORB:</strong>
+                    ${escapeHTML(market.orb || "--")}
+                </div>
+
+                <div>
+                    <strong>Support:</strong>
+                    ${escapeHTML(market.support || "--")}
+                </div>
+
+                <div>
+                    <strong>Resistance:</strong>
+                    ${escapeHTML(market.resistance || "--")}
+                </div>
+
+                <div>
+                    <strong>Pivot:</strong>
+                    ${escapeHTML(market.pivot || "--")}
+                </div>
+
+                <div>
+                    <strong>Price Action:</strong>
+                    ${escapeHTML(market.priceAction || "--")}
+                </div>
+
+            </div>
+        `;
+    }
+
+
+    // ====================================================
+    // REFRESH TIMER
+    // ====================================================
+
+    function clearRefreshTimer() {
+
+        if (state.timer) {
+
+            clearTimeout(
+                state.timer
+            );
+
+            state.timer = null;
+        }
+    }
+
+
+    function scheduleRefresh() {
+
+        clearRefreshTimer();
+
+        if (!state.firstRun) {
+            return;
+        }
+
+        state.timer =
+            setTimeout(
+                () => {
+
+                    runAnalysis(true);
+
+                },
+                REFRESH_MS
+            );
+    }
+
+
+    // ====================================================
+    // BUTTON
+    // ====================================================
+
+    function setupButton() {
+
+        const button =
+            $("runAnalysis");
+
+        if (!button) return;
+
+        button.addEventListener(
+            "click",
+            () => {
+
+                clearRefreshTimer();
+
+                runAnalysis(false);
+            }
+        );
+    }
+
+
+    // ====================================================
+    // INITIAL ENGINE CHECK
+    // ====================================================
+
+    function initialEngineCheck() {
+
+        try {
+
+            getEngine();
+
+            setStatus(
+                "ENGINE READY",
+                "success"
+            );
+
+            setText(
+                "dataSource",
+                "Angel One Live Data"
+            );
+
+        } catch (error) {
+
+            console.error(
+                error
+            );
+
+            setStatus(
+                "ENGINE NOT LOADED",
+                "error"
+            );
+
+            showError(
+                error.message
+            );
+        }
+    }
+
+
+    // ====================================================
+    // GLOBAL ERROR HANDLING
+    // ====================================================
+
+    window.addEventListener(
+        "error",
+        event => {
+
+            console.error(
+                "SHIV AI GLOBAL ERROR:",
+                event.error ||
+                event.message
+            );
+
+            const message =
+                event?.message ||
+                "Frontend JavaScript error.";
+
+            showError(
+                "Frontend Error: " +
+                message
+            );
+        }
+    );
+
+
+    window.addEventListener(
+        "unhandledrejection",
+        event => {
+
+            console.error(
+                "SHIV AI PROMISE ERROR:",
+                event.reason
+            );
+
+            showError(
+                "Async Error: " +
+                (
+                    event.reason?.message ||
+                    String(event.reason)
+                )
+            );
+        }
+    );
+
+
+    // ====================================================
+    // INIT
+    // ====================================================
+
+    function init() {
+
+        console.log(
+            "===================================="
+        );
+
+        console.log(
+            "SHIV AI TRADING FRONTEND STARTING"
+        );
+
+        console.log(
+            "===================================="
+        );
+
+        createMarketSelector();
+
+        setupButton();
+
+        initialEngineCheck();
+
+        // Auto-start analysis
+        setTimeout(
+            () => {
+                runAnalysis(false);
+            },
+            500
+        );
+    }
+
+
+    // ====================================================
+    // START
+    // ====================================================
+
+    if (
+        document.readyState ===
+        "loading"
+    ) {
+
+        document.addEventListener(
+            "DOMContentLoaded",
+            init
+        );
+
+    } else {
+
+        init();
+    }
+
+})();
