@@ -371,19 +371,26 @@ def normalize_strike(raw_strike):
         return None
 
 
+
 def get_ltp(exchange, symbol, token):
 
     api = ensure_session()
 
-    response = api.ltpData(
-        exchange,
-        symbol,
-        str(token)
+    # Angel One Market Data API
+    # LTP mode gives live market price using exchange + token.
+
+    response = api.getMarketData(
+        "LTP",
+        {
+            exchange: [
+                str(token)
+            ]
+        }
     )
 
     if not response:
         raise Exception(
-            "Empty LTP response"
+            "Empty Market Data response"
         )
 
     if response.get("status") is False:
@@ -393,16 +400,38 @@ def get_ltp(exchange, symbol, token):
 
     data = response.get("data") or {}
 
-    ltp = data.get("ltp")
+    fetched = data.get("fetched") or []
+
+    if not fetched:
+        unfetched = data.get(
+            "unfetched"
+        ) or []
+
+        raise Exception(
+            f"Option LTP not available. "
+            f"symbol={symbol}, "
+            f"token={token}, "
+            f"exchange={exchange}, "
+            f"unfetched={unfetched}"
+        )
+
+    quote = fetched[0]
+
+    ltp = quote.get("ltp")
 
     if ltp is None:
         raise Exception(
-            f"LTP missing: {response}"
+            f"LTP missing from Market Data: {response}"
         )
 
-    return float(ltp)
+    ltp = float(ltp)
 
+    if ltp <= 0:
+        raise Exception(
+            f"Invalid option LTP: {ltp}"
+        )
 
+    return ltp
 # =========================================================
 # GET SPOT LTP
 # =========================================================
