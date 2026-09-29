@@ -1,26 +1,24 @@
 import os
+import json
 import time
+import requests
 import pyotp
-from datetime import datetime, timedelta
+
+from datetime import datetime, timedelta, timezone
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from SmartApi import SmartConnect
 
+
 # =========================================================
-# SHIV AI TRADING - MULTI MARKET BACKEND
-# Angel One SmartAPI
-# NIFTY | BANK NIFTY | SENSEX
-# 5-MINUTE LIVE CANDLES
+# SHIV AI TRADING API
 # =========================================================
 
 app = FastAPI(
     title="SHIV AI TRADING API",
-    version="2.0.0"
+    version="3.0.0"
 )
-
-# ---------------------------------------------------------
-# CORS
-# ---------------------------------------------------------
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,56 +28,77 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ---------------------------------------------------------
-# CONFIG
-# ---------------------------------------------------------
+
+# =========================================================
+# ANGEL ONE CONFIG
+# =========================================================
 
 API_KEY = os.getenv("ANGEL_API_KEY", "")
 CLIENT_CODE = os.getenv("ANGEL_CLIENT_CODE", "")
 PIN = os.getenv("ANGEL_PIN", "")
 TOTP_SECRET = os.getenv("ANGEL_TOTP_SECRET", "")
 
-# ---------------------------------------------------------
-# SUPPORTED MARKETS
-# ---------------------------------------------------------
-#
-# Angel One index tokens:
-#
-# NIFTY     -> 99926000 / NSE
-# BANKNIFTY -> 99926009 / NSE
-# SENSEX    -> 99919000 / BSE
-#
-# ---------------------------------------------------------
+
+# =========================================================
+# MARKETS
+# =========================================================
 
 MARKETS = {
-
     "NIFTY": {
         "name": "NIFTY",
         "symbol": "NIFTY",
         "token": "99926000",
-        "exchange": "NSE"
+        "exchange": "NSE",
+        "derivative_exchange": "NFO"
     },
 
     "BANKNIFTY": {
         "name": "BANK NIFTY",
         "symbol": "BANKNIFTY",
         "token": "99926009",
-        "exchange": "NSE"
+        "exchange": "NSE",
+        "derivative_exchange": "NFO"
     },
 
     "SENSEX": {
         "name": "SENSEX",
         "symbol": "SENSEX",
         "token": "99919000",
-        "exchange": "BSE"
+        "exchange": "BSE",
+        "derivative_exchange": "BFO"
     }
 }
 
+
 INTERVAL = "FIVE_MINUTE"
 
-# ---------------------------------------------------------
-# SMART API SESSION
-# ---------------------------------------------------------
+
+# =========================================================
+# OPTION PREMIUM SETTINGS
+# =========================================================
+
+# These are configurable from Render Environment Variables.
+
+OPTION_SL_PCT = float(
+    os.getenv("OPTION_SL_PCT", "0.20")
+)
+
+OPTION_T1_PCT = float(
+    os.getenv("OPTION_T1_PCT", "0.25")
+)
+
+OPTION_T2_PCT = float(
+    os.getenv("OPTION_T2_PCT", "0.50")
+)
+
+OPTION_T3_PCT = float(
+    os.getenv("OPTION_T3_PCT", "0.75")
+)
+
+
+# =========================================================
+# ANGEL SESSION
+# =========================================================
 
 smart_api = None
 jwt_token = None
@@ -88,55 +107,64 @@ session_time = 0
 SESSION_VALID_SECONDS = 20 * 60
 
 
-# ---------------------------------------------------------
-# MARKET HELPER
-# ---------------------------------------------------------
+# =========================================================
+# INSTRUMENT MASTER CACHE
+# =========================================================
+
+INSTRUMENT_MASTER_URL = (
+    "https://margincalculator.angelone.in/"
+    "OpenAPI_File/files/OpenAPIScripMaster.json"
+)
+
+instrument_cache = None
+instrument_cache_time = 0
+
+INSTRUMENT_CACHE_SECONDS = 15 * 60
+
+
+# =========================================================
+# MARKET NORMALIZATION
+# =========================================================
 
 def normalize_market(market: str):
 
     if not market:
-        market = "NIFTY"
+        return "NIFTY"
 
-    market = market.upper().strip()
+    value = market.strip().upper()
 
     aliases = {
+        "NIFTY": "NIFTY",
         "NIFTY50": "NIFTY",
         "NIFTY 50": "NIFTY",
 
+        "BANKNIFTY": "BANKNIFTY",
         "BANK NIFTY": "BANKNIFTY",
-        "BANK_NIFTY": "BANKNIFTY",
         "BANK-NIFTY": "BANKNIFTY",
 
-        "SENSEX": "SENSEX"
+        "SENSEX": "SENSEX",
+        "BSE SENSEX": "SENSEX"
     }
 
-    market = aliases.get(market, market)
-
-    if market not in MARKETS:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Unsupported market. "
-                "Use NIFTY, BANKNIFTY or SENSEX."
-            )
-        )
-
-    return market
+    return aliases.get(value, value)
 
 
 def get_market_config(market: str):
 
-    market = normalize_market(market)
+    normalized = normalize_market(market)
 
-    return (
-        market,
-        MARKETS[market]
-    )
+    if normalized not in MARKETS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported market: {market}"
+        )
+
+    return normalized, MARKETS[normalized]
 
 
-# ---------------------------------------------------------
-# CREATE ANGEL ONE SESSION
-# ---------------------------------------------------------
+# =========================================================
+# CREATE ANGEL SESSION
+# =========================================================
 
 def create_session():
 
@@ -145,24 +173,16 @@ def create_session():
     global session_time
 
     if not API_KEY:
-        raise Exception(
-            "ANGEL_API_KEY is missing"
-        )
+        raise Exception("ANGEL_API_KEY is missing")
 
     if not CLIENT_CODE:
-        raise Exception(
-            "ANGEL_CLIENT_CODE is missing"
-        )
+        raise Exception("ANGEL_CLIENT_CODE is missing")
 
     if not PIN:
-        raise Exception(
-            "ANGEL_PIN is missing"
-        )
+        raise Exception("ANGEL_PIN is missing")
 
     if not TOTP_SECRET:
-        raise Exception(
-            "ANGEL_TOTP_SECRET is missing"
-        )
+        raise Exception("ANGEL_TOTP_SECRET is missing")
 
     try:
 
@@ -174,27 +194,23 @@ def create_session():
             TOTP_SECRET
         ).now()
 
-        login_data = smart_api.generateSession(
+        session = smart_api.generateSession(
             CLIENT_CODE,
             PIN,
             totp
         )
 
-        if not login_data:
+        if not session:
             raise Exception(
-                "Empty Angel One login response"
+                "Empty Angel One session response"
             )
 
-        if login_data.get("status") is not True:
-
-            message = login_data.get(
-                "message",
-                "Angel One login failed"
+        if session.get("status") is False:
+            raise Exception(
+                str(session)
             )
 
-            raise Exception(message)
-
-        data = login_data.get("data") or {}
+        data = session.get("data") or {}
 
         jwt_token = data.get(
             "jwtToken"
@@ -202,40 +218,37 @@ def create_session():
 
         if not jwt_token:
             raise Exception(
-                "JWT token not received"
+                "JWT token not received from Angel One"
             )
 
         session_time = time.time()
 
-        return True
+        return smart_api
 
     except Exception as e:
 
         smart_api = None
         jwt_token = None
-        session_time = 0
 
         raise Exception(
-            f"Angel One login error: {str(e)}"
+            f"Angel One login failed: {str(e)}"
         )
 
 
-# ---------------------------------------------------------
+# =========================================================
 # ENSURE SESSION
-# ---------------------------------------------------------
+# =========================================================
 
 def ensure_session():
 
     global smart_api
-    global jwt_token
     global session_time
 
     if (
         smart_api is None
-        or jwt_token is None
-        or (
-            time.time() - session_time
-        ) > SESSION_VALID_SECONDS
+        or not jwt_token
+        or time.time() - session_time
+        > SESSION_VALID_SECONDS
     ):
 
         create_session()
@@ -243,480 +256,836 @@ def ensure_session():
     return smart_api
 
 
-# ---------------------------------------------------------
+# =========================================================
+# INSTRUMENT MASTER
+# =========================================================
+
+def load_instruments():
+
+    global instrument_cache
+    global instrument_cache_time
+
+    now = time.time()
+
+    if (
+        instrument_cache is not None
+        and now - instrument_cache_time
+        < INSTRUMENT_CACHE_SECONDS
+    ):
+        return instrument_cache
+
+    try:
+
+        response = requests.get(
+            INSTRUMENT_MASTER_URL,
+            timeout=30
+        )
+
+        response.raise_for_status()
+
+        data = response.json()
+
+        if not isinstance(data, list):
+            raise Exception(
+                "Invalid instrument master format"
+            )
+
+        instrument_cache = data
+        instrument_cache_time = now
+
+        return data
+
+    except Exception as e:
+
+        # If cached data exists, use it
+        if instrument_cache is not None:
+            return instrument_cache
+
+        raise Exception(
+            f"Unable to load Angel instrument master: {str(e)}"
+        )
+
+
+# =========================================================
+# HELPERS
+# =========================================================
+
+def normalize_master_name(value):
+
+    if value is None:
+        return ""
+
+    return (
+        str(value)
+        .upper()
+        .replace(" ", "")
+        .replace("-", "")
+        .replace("_", "")
+    )
+
+
+def parse_expiry(value):
+
+    if not value:
+        return None
+
+    value = str(value).strip().upper()
+
+    formats = [
+        "%d%b%Y",
+        "%d%b%y",
+        "%d-%b-%Y",
+        "%d-%b-%y",
+        "%Y-%m-%d",
+        "%d/%m/%Y"
+    ]
+
+    for fmt in formats:
+
+        try:
+            return datetime.strptime(
+                value,
+                fmt
+            ).date()
+
+        except ValueError:
+            continue
+
+    return None
+
+
+def normalize_strike(raw_strike):
+
+    try:
+
+        value = float(raw_strike)
+
+        # Angel One option-master strikes are commonly
+        # represented in paise-style scaling.
+        if value >= 100000:
+            return value / 100.0
+
+        return value
+
+    except Exception:
+        return None
+
+
+def get_ltp(exchange, symbol, token):
+
+    api = ensure_session()
+
+    response = api.ltpData(
+        exchange,
+        symbol,
+        str(token)
+    )
+
+    if not response:
+        raise Exception(
+            "Empty LTP response"
+        )
+
+    if response.get("status") is False:
+        raise Exception(
+            str(response)
+        )
+
+    data = response.get("data") or {}
+
+    ltp = data.get("ltp")
+
+    if ltp is None:
+        raise Exception(
+            f"LTP missing: {response}"
+        )
+
+    return float(ltp)
+
+
+# =========================================================
+# GET SPOT LTP
+# =========================================================
+
+def get_spot_data(market):
+
+    normalized, config = get_market_config(
+        market
+    )
+
+    api = ensure_session()
+
+    response = api.ltpData(
+        config["exchange"],
+        config["symbol"],
+        config["token"]
+    )
+
+    if not response:
+        raise Exception(
+            "Empty market LTP response"
+        )
+
+    if response.get("status") is False:
+        raise Exception(
+            str(response)
+        )
+
+    data = response.get("data") or {}
+
+    ltp = data.get("ltp")
+
+    if ltp is None:
+        raise Exception(
+            f"Spot LTP missing: {response}"
+        )
+
+    return {
+        "market": normalized,
+        "symbol": config["symbol"],
+        "exchange": config["exchange"],
+        "token": config["token"],
+        "ltp": float(ltp),
+        "open": data.get("open"),
+        "high": data.get("high"),
+        "low": data.get("low"),
+        "close": data.get("close")
+    }
+
+
+# =========================================================
+# FIND OPTION CONTRACT
+# =========================================================
+
+def find_option_contract(
+    market,
+    spot,
+    option_type
+):
+
+    normalized, config = get_market_config(
+        market
+    )
+
+    option_type = option_type.upper()
+
+    if option_type not in ["CE", "PE"]:
+        raise Exception(
+            "option_type must be CE or PE"
+        )
+
+    instruments = load_instruments()
+
+    derivative_exchange = config[
+        "derivative_exchange"
+    ]
+
+    target_name = normalize_master_name(
+        config["symbol"]
+    )
+
+    today = datetime.now(
+        timezone.utc
+    ).date()
+
+    candidates = []
+
+    for item in instruments:
+
+        try:
+
+            if str(
+                item.get("exch_seg", "")
+            ).upper() != derivative_exchange:
+                continue
+
+            instrument_type = str(
+                item.get("instrumenttype", "")
+            ).upper()
+
+            if instrument_type != "OPTIDX":
+                continue
+
+            master_name = normalize_master_name(
+                item.get("name", "")
+            )
+
+            if master_name != target_name:
+                continue
+
+            symbol = str(
+                item.get("symbol", "")
+            ).upper()
+
+            if not symbol.endswith(
+                option_type
+            ):
+                continue
+
+            expiry_value = item.get(
+                "expiry"
+            )
+
+            expiry_date = parse_expiry(
+                expiry_value
+            )
+
+            if expiry_date is None:
+                continue
+
+            if expiry_date < today:
+                continue
+
+            strike = normalize_strike(
+                item.get("strike")
+            )
+
+            if strike is None:
+                continue
+
+            token = item.get(
+                "token"
+            )
+
+            if not token:
+                continue
+
+            candidates.append({
+                "symbol": symbol,
+                "token": str(token),
+                "expiry": str(
+                    expiry_value
+                ),
+                "expiry_date": expiry_date,
+                "strike": float(strike),
+                "lotsize": item.get(
+                    "lotsize"
+                ),
+                "tick_size": item.get(
+                    "tick_size"
+                ),
+                "exchange": derivative_exchange
+            })
+
+        except Exception:
+            continue
+
+    if not candidates:
+
+        raise Exception(
+            f"No {option_type} options found for {normalized}"
+        )
+
+    # -----------------------------------------------------
+    # Select nearest upcoming expiry
+    # -----------------------------------------------------
+
+    expiries = sorted(
+        set(
+            item["expiry_date"]
+            for item in candidates
+        )
+    )
+
+    selected_expiry = expiries[0]
+
+    expiry_candidates = [
+        item
+        for item in candidates
+        if item["expiry_date"]
+        == selected_expiry
+    ]
+
+    # -----------------------------------------------------
+    # Select strike nearest to spot
+    # -----------------------------------------------------
+
+    selected = min(
+        expiry_candidates,
+        key=lambda x: abs(
+            x["strike"] - spot
+        )
+    )
+
+    return selected
+
+
+# =========================================================
+# OPTION PREMIUM PLAN
+# =========================================================
+
+def create_option_plan(
+    premium
+):
+
+    premium = float(premium)
+
+    entry = premium
+
+    stop_loss = premium * (
+        1 - OPTION_SL_PCT
+    )
+
+    target1 = premium * (
+        1 + OPTION_T1_PCT
+    )
+
+    target2 = premium * (
+        1 + OPTION_T2_PCT
+    )
+
+    target3 = premium * (
+        1 + OPTION_T3_PCT
+    )
+
+    return {
+        "entry": round(entry, 2),
+        "stopLoss": round(
+            stop_loss,
+            2
+        ),
+        "target1": round(
+            target1,
+            2
+        ),
+        "target2": round(
+            target2,
+            2
+        ),
+        "target3": round(
+            target3,
+            2
+        )
+    }
+
+
+# =========================================================
 # ROOT
-# ---------------------------------------------------------
+# =========================================================
 
 @app.get("/")
 def root():
 
     return {
         "status": "online",
-        "name": "SHIV AI TRADING",
-        "engine": "AI Trading Backend",
-        "markets": [
-            "NIFTY",
-            "BANKNIFTY",
-            "SENSEX"
-        ],
+        "name": "SHIV AI TRADING API",
+        "engine": "LIVE ANGEL ONE",
+        "version": "3.0.0",
+        "markets": list(
+            MARKETS.keys()
+        ),
         "timeframe": "5 Minute",
         "mode": "LIVE"
     }
 
 
-# ---------------------------------------------------------
-# HEALTH CHECK
-# ---------------------------------------------------------
+# =========================================================
+# HEALTH
+# =========================================================
 
 @app.get("/health")
 def health():
 
     return {
         "status": "healthy",
-        "server": "SHIV AI TRADING",
-
         "angel_configured": bool(
             API_KEY
             and CLIENT_CODE
             and PIN
             and TOTP_SECRET
         ),
-
-        "markets": {
-            "NIFTY": MARKETS["NIFTY"],
-            "BANKNIFTY": MARKETS["BANKNIFTY"],
-            "SENSEX": MARKETS["SENSEX"]
-        },
-
-        "interval": INTERVAL
+        "markets": list(
+            MARKETS.keys()
+        ),
+        "interval": INTERVAL,
+        "option_engine": True
     }
 
 
-# ---------------------------------------------------------
-# GET LIVE 5-MINUTE CANDLES
-# ---------------------------------------------------------
+# =========================================================
+# CANDLES
+# =========================================================
 
 @app.get("/api/candles")
-def get_candles(
+def candles(
     limit: int = 100,
     market: str = "NIFTY"
 ):
 
-    try:
+    if limit < 20:
+        limit = 20
 
-        # -----------------------------
-        # Validate limit
-        # -----------------------------
+    if limit > 200:
+        limit = 200
 
-        if limit < 20:
-            limit = 20
+    normalized, config = get_market_config(
+        market
+    )
 
-        if limit > 200:
-            limit = 200
+    api = ensure_session()
 
-        # -----------------------------
-        # Market
-        # -----------------------------
+    to_date = datetime.now()
 
-        market_key, config = get_market_config(
-            market
+    # Fetch enough history for requested candles.
+    # 5 days gives a reasonable intraday window.
+
+    from_date = to_date - timedelta(
+        days=5
+    )
+
+    response = api.getCandleData({
+        "exchange": config["exchange"],
+        "symboltoken": config["token"],
+        "interval": INTERVAL,
+        "fromdate": from_date.strftime(
+            "%Y-%m-%d %H:%M"
+        ),
+        "todate": to_date.strftime(
+            "%Y-%m-%d %H:%M"
         )
+    })
 
-        exchange = config["exchange"]
-        symbol = config["symbol"]
-        token = config["token"]
-
-        # -----------------------------
-        # Angel Session
-        # -----------------------------
-
-        api = ensure_session()
-
-        # -----------------------------
-        # Time range
-        # -----------------------------
-
-        now = datetime.now()
-
-        from_time = (
-            now - timedelta(days=5)
-        )
-
-        # -----------------------------
-        # Historical parameters
-        # -----------------------------
-
-        historic_params = {
-
-            "exchange": exchange,
-
-            "symboltoken": token,
-
-            "interval": INTERVAL,
-
-            "fromdate":
-                from_time.strftime(
-                    "%Y-%m-%d %H:%M"
-                ),
-
-            "todate":
-                now.strftime(
-                    "%Y-%m-%d %H:%M"
-                )
-        }
-
-        # -----------------------------
-        # Get candles
-        # -----------------------------
-
-        response = api.getCandleData(
-            historic_params
-        )
-
-        if not response:
-            raise Exception(
-                "Empty candle response"
-            )
-
-        if response.get("status") is not True:
-
-            raise Exception(
-                response.get(
-                    "message",
-                    f"Unable to fetch {market_key} candles"
-                )
-            )
-
-        raw_data = (
-            response.get("data") or []
-        )
-
-        if not raw_data:
-            raise Exception(
-                f"No candle data received for {market_key}"
-            )
-
-        # -----------------------------
-        # Format candles
-        # -----------------------------
-
-        candles = []
-
-        for row in raw_data[-limit:]:
-
-            if len(row) < 6:
-                continue
-
-            try:
-
-                candles.append({
-
-                    "time": row[0],
-
-                    "open": float(row[1]),
-
-                    "high": float(row[2]),
-
-                    "low": float(row[3]),
-
-                    "close": float(row[4]),
-
-                    "volume": float(row[5])
-
-                })
-
-            except (
-                TypeError,
-                ValueError
-            ):
-
-                continue
-
-        if len(candles) < 20:
-
-            raise Exception(
-                f"Not enough {market_key} candle data"
-            )
-
-        # -----------------------------
-        # Response
-        # -----------------------------
-
-        return {
-
-            "success": True,
-
-            "market": market_key,
-
-            "symbol": symbol,
-
-            "token": token,
-
-            "exchange": exchange,
-
-            "timeframe": "5m",
-
-            "interval": INTERVAL,
-
-            "count": len(candles),
-
-            "candles": candles
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception as e:
-
+    if not response:
         raise HTTPException(
-            status_code=500,
-            detail=str(e)
+            status_code=502,
+            detail="Empty candle response"
         )
 
-
-# ---------------------------------------------------------
-# MARKET LTP
-# ---------------------------------------------------------
-
-@app.get("/api/market")
-def market_data(
-    market: str = "NIFTY"
-):
-
-    try:
-
-        market_key, config = get_market_config(
-            market
-        )
-
-        exchange = config["exchange"]
-        symbol = config["symbol"]
-        token = config["token"]
-
-        api = ensure_session()
-
-        response = api.ltpData(
-            exchange,
-            symbol,
-            token
-        )
-
-        if not response:
-
-            raise Exception(
-                "Empty LTP response"
-            )
-
-        if response.get("status") is not True:
-
-            raise Exception(
-                response.get(
-                    "message",
-                    f"Unable to fetch {market_key} price"
-                )
-            )
-
-        data = (
-            response.get("data") or {}
-        )
-
-        return {
-
-            "success": True,
-
-            "market": market_key,
-
-            "symbol": symbol,
-
-            "exchange": exchange,
-
-            "token": token,
-
-            "ltp": data.get("ltp"),
-
-            "open": data.get("open"),
-
-            "high": data.get("high"),
-
-            "low": data.get("low"),
-
-            "close": data.get("close")
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception as e:
-
+    if response.get("status") is False:
         raise HTTPException(
-            status_code=500,
-            detail=str(e)
+            status_code=502,
+            detail=str(response)
         )
 
+    data = response.get(
+        "data"
+    ) or []
 
-# ---------------------------------------------------------
-# ANALYSIS DATA
-# ---------------------------------------------------------
-#
-# strategy.js performs:
-#
-# MARKET STRUCTURE
-# BOS
-# CHOCH
-# FVG
-# LIQUIDITY
-# ORDER BLOCK
-# BREAKER
-# FIBONACCI
-# EMA
-# VWAP
-# RSI
-# MACD
-# STOCHASTIC
-# ADX
-# SUPERTREND
-# ORB
-# PRICE ACTION
-# BREAKOUT
-# BREAKOUT RETEST
-# BOLLINGER
-# ROC
-# MFI
-# WILLIAMS R
-# PREMIUM DISCOUNT
-# ETC.
-#
-# Backend supplies selected market candles.
-#
-# ---------------------------------------------------------
-
-@app.get("/api/analyze")
-def analyze_data(
-
-    limit: int = 100,
-
-    market: str = "NIFTY"
-
-):
-
-    try:
-
-        market_key, config = get_market_config(
-            market
-        )
-
-        candle_response = get_candles(
-
-            limit=limit,
-
-            market=market_key
-
-        )
-
-        candles = (
-            candle_response["candles"]
-        )
-
-        if len(candles) < 20:
-
-            raise Exception(
-                "Not enough candles for analysis"
-            )
-
-        return {
-
-            "success": True,
-
-            "market": market_key,
-
-            "symbol": config["symbol"],
-
-            "exchange": config["exchange"],
-
-            "token": config["token"],
-
-            "timeframe": "5m",
-
-            "dataMode": "LIVE",
-
-            "engine": "SHIV_AI_TRADING",
-
-            "candles": candles
-        }
-
-    except HTTPException:
-        raise
-
-    except Exception as e:
-
-        raise HTTPException(
-            status_code=500,
-            detail=str(e)
-        )
-
-
-# ---------------------------------------------------------
-# SUPPORTED MARKETS
-# ---------------------------------------------------------
-
-@app.get("/api/markets")
-def supported_markets():
+    if len(data) > limit:
+        data = data[-limit:]
 
     return {
-
         "success": True,
-
-        "markets": [
-
-            {
-                "key": "NIFTY",
-                "name": "NIFTY",
-                "exchange": "NSE",
-                "token": "99926000"
-            },
-
-            {
-                "key": "BANKNIFTY",
-                "name": "BANK NIFTY",
-                "exchange": "NSE",
-                "token": "99926009"
-            },
-
-            {
-                "key": "SENSEX",
-                "name": "SENSEX",
-                "exchange": "BSE",
-                "token": "99919000"
-            }
-
-        ]
-
+        "market": normalized,
+        "exchange": config["exchange"],
+        "symbol": config["symbol"],
+        "token": config["token"],
+        "interval": INTERVAL,
+        "count": len(data),
+        "candles": data
     }
 
 
-# ---------------------------------------------------------
-# SERVER START
-# ---------------------------------------------------------
+# =========================================================
+# MARKET
+# =========================================================
+
+@app.get("/api/market")
+def market(
+    market: str = "NIFTY"
+):
+
+    try:
+
+        return {
+            "success": True,
+            **get_spot_data(
+                market
+            )
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=502,
+            detail=str(e)
+        )
+
+
+# =========================================================
+# ANALYZE
+# =========================================================
+
+@app.get("/api/analyze")
+def analyze(
+    market: str = "NIFTY",
+    limit: int = 100
+):
+
+    normalized, config = get_market_config(
+        market
+    )
+
+    candle_response = candles(
+        limit=limit,
+        market=normalized
+    )
+
+    return {
+        "success": True,
+        "market": normalized,
+        "symbol": config["symbol"],
+        "timeframe": "5m",
+        "mode": "LIVE ANGEL ONE",
+        "candles": candle_response[
+            "candles"
+        ],
+        "count": candle_response[
+            "count"
+        ]
+    }
+
+
+# =========================================================
+# MARKETS
+# =========================================================
+
+@app.get("/api/markets")
+def markets():
+
+    return {
+        "success": True,
+        "markets": MARKETS
+    }
+
+
+# =========================================================
+# OPTION PREMIUM
+# =========================================================
+#
+# Example:
+#
+# /api/option-premium?market=BANKNIFTY&direction=BUY
+#
+# BUY  -> CE
+# SELL -> PE
+# WAIT -> no option
+#
+# =========================================================
+
+@app.get("/api/option-premium")
+def option_premium(
+    market: str = "NIFTY",
+    direction: str = "WAIT"
+):
+
+    try:
+
+        normalized, config = get_market_config(
+            market
+        )
+
+        direction = (
+            direction
+            .strip()
+            .upper()
+        )
+
+        # -------------------------------------------------
+        # WAIT = no option trade
+        # -------------------------------------------------
+
+        if direction == "WAIT":
+
+            spot_data = get_spot_data(
+                normalized
+            )
+
+            return {
+                "success": True,
+                "market": normalized,
+                "signal": "WAIT",
+                "optionType": None,
+                "exchange": config[
+                    "derivative_exchange"
+                ],
+                "spot": spot_data[
+                    "ltp"
+                ],
+                "message": "No option selected while AI decision is WAIT."
+            }
+
+        # -------------------------------------------------
+        # Only BUY / SELL accepted
+        # -------------------------------------------------
+
+        if direction not in [
+            "BUY",
+            "SELL"
+        ]:
+
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "direction must be BUY, SELL or WAIT"
+                )
+            )
+
+        # -------------------------------------------------
+        # Get live index spot
+        # -------------------------------------------------
+
+        spot_data = get_spot_data(
+            normalized
+        )
+
+        spot = float(
+            spot_data["ltp"]
+        )
+
+        # -------------------------------------------------
+        # BUY signal -> CE
+        # SELL signal -> PE
+        # -------------------------------------------------
+
+        option_type = (
+            "CE"
+            if direction == "BUY"
+            else "PE"
+        )
+
+        # -------------------------------------------------
+        # Find actual Angel option contract
+        # -------------------------------------------------
+
+        contract = find_option_contract(
+            normalized,
+            spot,
+            option_type
+        )
+
+        # -------------------------------------------------
+        # Get live option premium
+        # -------------------------------------------------
+
+        premium = get_ltp(
+            contract["exchange"],
+            contract["symbol"],
+            contract["token"]
+        )
+
+        # -------------------------------------------------
+        # Premium trade levels
+        # -------------------------------------------------
+
+        plan = create_option_plan(
+            premium
+        )
+
+        return {
+            "success": True,
+
+            "market": normalized,
+
+            "signal": direction,
+
+            "spot": round(
+                spot,
+                2
+            ),
+
+            "optionType": option_type,
+
+            "exchange": contract[
+                "exchange"
+            ],
+
+            "tradingsymbol": contract[
+                "symbol"
+            ],
+
+            "symboltoken": contract[
+                "token"
+            ],
+
+            "expiry": contract[
+                "expiry"
+            ],
+
+            "strike": contract[
+                "strike"
+            ],
+
+            "lotsize": contract[
+                "lotsize"
+            ],
+
+            "tickSize": contract[
+                "tick_size"
+            ],
+
+            "premium": round(
+                premium,
+                2
+            ),
+
+            "entry": plan[
+                "entry"
+            ],
+
+            "stopLoss": plan[
+                "stopLoss"
+            ],
+
+            "target1": plan[
+                "target1"
+            ],
+
+            "target2": plan[
+                "target2"
+            ],
+
+            "target3": plan[
+                "target3"
+            ],
+
+            "riskSettings": {
+                "stopLossPercent": (
+                    OPTION_SL_PCT * 100
+                ),
+                "target1Percent": (
+                    OPTION_T1_PCT * 100
+                ),
+                "target2Percent": (
+                    OPTION_T2_PCT * 100
+                ),
+                "target3Percent": (
+                    OPTION_T3_PCT * 100
+                )
+            }
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as e:
+
+        raise HTTPException(
+            status_code=502,
+            detail=str(e)
+        )
+
+
+# =========================================================
+# RUN
+# =========================================================
 
 if __name__ == "__main__":
 
     import uvicorn
 
     port = int(
-
         os.getenv(
             "PORT",
             "8000"
         )
-
     )
 
     uvicorn.run(
-
         app,
-
         host="0.0.0.0",
-
         port=port
-
     )
