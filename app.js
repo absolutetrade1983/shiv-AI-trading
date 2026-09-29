@@ -1,8 +1,7 @@
 /* =========================================================
    SHIV AI TRADING — FRONTEND CONTROLLER
-   Compatible with current index.html
-   Strategy engine: strategy.js
-   Backend: Render API
+   LIVE CANDLES -> EXISTING strategy.js -> RESULT
+   Strategy logic is NOT modified here
 ========================================================= */
 
 const API_BASE =
@@ -16,15 +15,16 @@ let isLoading = false;
 
 
 /* =========================================================
-   DOM
+   DOM HELPER
 ========================================================= */
 
-const $ = (id) =>
-    document.getElementById(id);
+function $(id) {
+    return document.getElementById(id);
+}
 
 
 /* =========================================================
-   HELPERS
+   NUMBER HELPERS
 ========================================================= */
 
 function safeNumber(value, fallback = 0) {
@@ -84,17 +84,28 @@ function formatTime(value) {
 }
 
 
+function escapeHtml(value) {
+
+    return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+}
+
+
 /* =========================================================
-   API
+   API FETCH
 ========================================================= */
 
-async function apiFetch(url, options = {}) {
+async function apiFetch(url) {
 
     const response =
         await fetch(
             url,
             {
-                ...options,
+                method: "GET",
                 cache: "no-store"
             }
         );
@@ -120,7 +131,7 @@ async function apiFetch(url, options = {}) {
             }
 
         } catch (_) {
-            // ignore JSON parsing failure
+            // Ignore JSON parsing failure
         }
 
         throw new Error(message);
@@ -160,7 +171,8 @@ function hideError() {
         return;
     }
 
-    box.textContent = "";
+    box.textContent =
+        "";
 
     box.style.display =
         "none";
@@ -204,10 +216,13 @@ function buildMarketSelector() {
         return;
     }
 
-    area.innerHTML = "";
+    area.innerHTML =
+        "";
 
     const wrapper =
-        document.createElement("div");
+        document.createElement(
+            "div"
+        );
 
     wrapper.id =
         "marketSelectorWrapper";
@@ -231,7 +246,9 @@ function buildMarketSelector() {
         (market) => {
 
             const button =
-                document.createElement("button");
+                document.createElement(
+                    "button"
+                );
 
             button.type =
                 "button";
@@ -328,7 +345,7 @@ function updateMarketButtons() {
 
 
 /* =========================================================
-   DATA SOURCE
+   LIVE DATA SOURCE LABEL
 ========================================================= */
 
 function setDataSource(
@@ -362,7 +379,7 @@ function setDataSource(
 
 
 /* =========================================================
-   SPOT
+   SPOT DISPLAY
 ========================================================= */
 
 function extractSpot(data) {
@@ -372,17 +389,20 @@ function extractSpot(data) {
     }
 
     const candidates = [
+
         data.spot,
         data.ltp,
         data.price,
         data.last_price,
         data.lastPrice,
         data.close,
+
         data.data?.spot,
         data.data?.ltp,
         data.data?.price,
         data.data?.last_price,
-        data.data?.lastPrice
+        data.data?.lastPrice,
+        data.data?.close
     ];
 
     for (
@@ -401,6 +421,74 @@ function extractSpot(data) {
 }
 
 
+function renderSpot(
+    spot
+) {
+
+    const area =
+        $("marketArea");
+
+    if (!area) {
+        return;
+    }
+
+    let box =
+        $("liveSpotBox");
+
+    if (!box) {
+
+        box =
+            document.createElement(
+                "div"
+            );
+
+        box.id =
+            "liveSpotBox";
+
+        box.style.background =
+            "#101827";
+
+        box.style.border =
+            "1px solid #1d293b";
+
+        box.style.borderRadius =
+            "10px";
+
+        box.style.padding =
+            "11px 14px";
+
+        box.style.marginBottom =
+            "12px";
+
+        box.style.textAlign =
+            "center";
+
+        box.style.color =
+            "#ffffff";
+
+        box.style.fontWeight =
+            "800";
+
+        area.appendChild(
+            box
+        );
+    }
+
+    box.innerHTML =
+        `
+        ${selectedMarket} SPOT
+        <span
+            style="
+                color:#36d399;
+                margin-left:8px;
+            "
+        >
+            ${formatNumber(spot)}
+        </span>
+        `;
+}
+
+
 async function loadSpot() {
 
     const data =
@@ -413,79 +501,150 @@ async function loadSpot() {
 
     if (spot !== null) {
 
-        const marketCard =
-            document.querySelector(
-                "#marketArea"
-            );
-
-        /*
-         * The current index.html has no
-         * dedicated spot element.
-         * Add a compact live spot display.
-         */
-
-        let spotBox =
-            document.getElementById(
-                "liveSpotBox"
-            );
-
-        if (!spotBox) {
-
-            spotBox =
-                document.createElement(
-                    "div"
-                );
-
-            spotBox.id =
-                "liveSpotBox";
-
-            spotBox.style.background =
-                "#101827";
-
-            spotBox.style.border =
-                "1px solid #1d293b";
-
-            spotBox.style.borderRadius =
-                "10px";
-
-            spotBox.style.padding =
-                "11px 14px";
-
-            spotBox.style.marginBottom =
-                "12px";
-
-            spotBox.style.textAlign =
-                "center";
-
-            spotBox.style.color =
-                "#ffffff";
-
-            spotBox.style.fontWeight =
-                "800";
-
-            if (marketCard) {
-                marketCard.appendChild(
-                    spotBox
-                );
-            }
-        }
-
-        spotBox.innerHTML =
-            `${selectedMarket} SPOT <span style="color:#36d399;margin-left:8px;">${formatNumber(spot)}</span>`;
+        renderSpot(
+            spot
+        );
     }
 
-    setDataSource(true);
+    setDataSource(
+        true
+    );
 
     return data;
 }
 
 
 /* =========================================================
-   CONFIDENCE MAPPING
-   EXACTLY MATCHES strategy.js OUTPUT
+   CANDLE EXTRACTION
 ========================================================= */
 
-function getBuyConfidence(result) {
+function extractCandles(data) {
+
+    if (!data) {
+        return [];
+    }
+
+    if (Array.isArray(data)) {
+        return data;
+    }
+
+    if (
+        Array.isArray(
+            data.candles
+        )
+    ) {
+        return data.candles;
+    }
+
+    if (
+        Array.isArray(
+            data.data
+        )
+    ) {
+        return data.data;
+    }
+
+    if (
+        Array.isArray(
+            data.data?.candles
+        )
+    ) {
+        return data.data.candles;
+    }
+
+    return [];
+}
+
+
+/* =========================================================
+   GET LIVE CANDLES
+========================================================= */
+
+async function loadCandles() {
+
+    const data =
+        await apiFetch(
+            `${API_BASE}/api/candles?market=${encodeURIComponent(selectedMarket)}`
+        );
+
+    const candles =
+        extractCandles(
+            data
+        );
+
+    if (!Array.isArray(candles)) {
+
+        throw new Error(
+            "Candle data is invalid."
+        );
+    }
+
+    if (candles.length < 50) {
+
+        throw new Error(
+            `Not enough candles. Received ${candles.length}, minimum 50 required.`
+        );
+    }
+
+    return candles;
+}
+
+
+/* =========================================================
+   EXACT STRATEGY ENGINE CONNECTION
+========================================================= */
+
+function runStrategyEngine(
+    candles
+) {
+
+    /*
+     * strategy.js is loaded BEFORE app.js
+     * in index.html.
+     *
+     * The existing strategy engine remains
+     * completely untouched.
+     */
+
+    if (
+        typeof window.analyzeMarket !==
+        "function"
+    ) {
+
+        throw new Error(
+            "strategy.js loaded, but analyzeMarket() was not found."
+        );
+    }
+
+    const result =
+        window.analyzeMarket(
+            candles,
+            selectedMarket
+        );
+
+    if (!result) {
+
+        throw new Error(
+            "Strategy engine returned no result."
+        );
+    }
+
+    return (
+        result.result ||
+        result.analysis ||
+        result
+    );
+}
+
+
+/* =========================================================
+   CONFIDENCE
+   EXACT FIELDS FROM strategy.js
+========================================================= */
+
+function getBuyConfidence(
+    result
+) {
 
     const direct =
         Number(
@@ -493,32 +652,43 @@ function getBuyConfidence(result) {
         );
 
     if (Number.isFinite(direct)) {
-        return clamp(direct);
+
+        return clamp(
+            direct
+        );
     }
 
-    const score =
+    const nested =
         Number(
             result?.scores?.buyConfidence
         );
 
-    if (Number.isFinite(score)) {
-        return clamp(score);
+    if (Number.isFinite(nested)) {
+
+        return clamp(
+            nested
+        );
     }
 
-    const buyScore =
+    const score =
         Number(
             result?.scores?.buy
         );
 
-    if (Number.isFinite(buyScore)) {
-        return clamp(buyScore);
+    if (Number.isFinite(score)) {
+
+        return clamp(
+            score
+        );
     }
 
     return 0;
 }
 
 
-function getSellConfidence(result) {
+function getSellConfidence(
+    result
+) {
 
     const direct =
         Number(
@@ -526,32 +696,43 @@ function getSellConfidence(result) {
         );
 
     if (Number.isFinite(direct)) {
-        return clamp(direct);
+
+        return clamp(
+            direct
+        );
     }
 
-    const score =
+    const nested =
         Number(
             result?.scores?.sellConfidence
         );
 
-    if (Number.isFinite(score)) {
-        return clamp(score);
+    if (Number.isFinite(nested)) {
+
+        return clamp(
+            nested
+        );
     }
 
-    const sellScore =
+    const score =
         Number(
             result?.scores?.sell
         );
 
-    if (Number.isFinite(sellScore)) {
-        return clamp(sellScore);
+    if (Number.isFinite(score)) {
+
+        return clamp(
+            score
+        );
     }
 
     return 0;
 }
 
 
-function getOverallConfidence(result) {
+function getOverallConfidence(
+    result
+) {
 
     const direct =
         Number(
@@ -559,16 +740,22 @@ function getOverallConfidence(result) {
         );
 
     if (Number.isFinite(direct)) {
-        return clamp(direct);
+
+        return clamp(
+            direct
+        );
     }
 
-    const score =
+    const nested =
         Number(
             result?.scores?.confidence
         );
 
-    if (Number.isFinite(score)) {
-        return clamp(score);
+    if (Number.isFinite(nested)) {
+
+        return clamp(
+            nested
+        );
     }
 
     return Math.max(
@@ -582,20 +769,23 @@ function getOverallConfidence(result) {
    DECISION
 ========================================================= */
 
-function getDecision(result) {
+function getDecision(
+    result
+) {
 
-    const value =
+    const decision =
         String(
             result?.decision ||
             "WAIT"
         ).toUpperCase();
 
     if (
-        value === "BUY" ||
-        value === "SELL" ||
-        value === "WAIT"
+        decision === "BUY" ||
+        decision === "SELL" ||
+        decision === "WAIT"
     ) {
-        return value;
+
+        return decision;
     }
 
     return "WAIT";
@@ -603,12 +793,13 @@ function getDecision(result) {
 
 
 /* =========================================================
-   RESET RESULT UI
+   RESET UI
 ========================================================= */
 
 function resetTradeUI() {
 
     const ids = [
+
         "entry",
         "stopLoss",
         "target",
@@ -621,22 +812,37 @@ function resetTradeUI() {
     ids.forEach(
         (id) => {
 
-            const el =
+            const element =
                 $(id);
 
-            if (el) {
-                el.textContent =
+            if (element) {
+
+                element.textContent =
                     "--";
             }
         }
     );
 
+    if ($("buyScore")) {
+
+        $("buyScore").textContent =
+            "0%";
+    }
+
+    if ($("sellScore")) {
+
+        $("sellScore").textContent =
+            "0%";
+    }
+
     if ($("buyAgreement")) {
+
         $("buyAgreement").textContent =
             "0";
     }
 
     if ($("sellAgreement")) {
+
         $("sellAgreement").textContent =
             "0";
     }
@@ -722,37 +928,50 @@ function resetTradeUI() {
    RENDER RESULT
 ========================================================= */
 
-function renderResult(result) {
-
-    if (!result) {
-        return;
-    }
+function renderResult(
+    result
+) {
 
     const decision =
-        getDecision(result);
+        getDecision(
+            result
+        );
 
     const buyConfidence =
-        getBuyConfidence(result);
+        getBuyConfidence(
+            result
+        );
 
     const sellConfidence =
-        getSellConfidence(result);
+        getSellConfidence(
+            result
+        );
 
-    const overallConfidence =
-        getOverallConfidence(result);
+    const confidence =
+        getOverallConfidence(
+            result
+        );
 
-    /* Decision */
+
+    /* -----------------------------------------
+       DECISION
+    ----------------------------------------- */
 
     if ($("decision")) {
 
         $("decision").textContent =
             decision;
 
-        if (decision === "BUY") {
+        if (
+            decision === "BUY"
+        ) {
 
             $("decision").style.color =
                 "#22c55e";
 
-        } else if (decision === "SELL") {
+        } else if (
+            decision === "SELL"
+        ) {
 
             $("decision").style.color =
                 "#ef476f";
@@ -765,36 +984,59 @@ function renderResult(result) {
     }
 
 
-    /* Confidence */
+    /* -----------------------------------------
+       CONFIDENCE
+    ----------------------------------------- */
 
     if ($("confidence")) {
 
         $("confidence").innerHTML =
             `
-            CONFIDENCE: <strong>${overallConfidence}%</strong>
+            CONFIDENCE:
+            <strong>
+                ${confidence}%
+            </strong>
+
             &nbsp; | &nbsp;
-            BUY: <strong style="color:#22c55e">${buyConfidence}%</strong>
+
+            BUY:
+            <strong
+                style="color:#22c55e"
+            >
+                ${buyConfidence}%
+            </strong>
+
             &nbsp; | &nbsp;
-            SELL: <strong style="color:#ef476f">${sellConfidence}%</strong>
+
+            SELL:
+            <strong
+                style="color:#ef476f"
+            >
+                ${sellConfidence}%
+            </strong>
             `;
     }
 
 
-    /* Time */
+    /* -----------------------------------------
+       SIGNAL TIME
+    ----------------------------------------- */
 
     if ($("signalTime")) {
 
-        const signalTime =
+        const time =
             result.signalTime ||
             result.signalCandleTime ||
             result.timestamp;
 
         $("signalTime").textContent =
-            `Signal Time: ${formatTime(signalTime)}`;
+            `Signal Time: ${formatTime(time)}`;
     }
 
 
-    /* Trade */
+    /* -----------------------------------------
+       TRADE LEVELS
+    ----------------------------------------- */
 
     if ($("entry")) {
 
@@ -832,7 +1074,10 @@ function renderResult(result) {
 
         $("riskReward").textContent =
             result.riskReward != null
-                ? formatNumber(result.riskReward, 2)
+                ? formatNumber(
+                    result.riskReward,
+                    2
+                )
                 : "--";
     }
 
@@ -847,12 +1092,16 @@ function renderResult(result) {
 
         $("strike").textContent =
             result.suggestedStrike != null
-                ? String(result.suggestedStrike)
+                ? String(
+                    result.suggestedStrike
+                )
                 : "--";
     }
 
 
-    /* Scores */
+    /* -----------------------------------------
+       SCORE CARDS
+    ----------------------------------------- */
 
     if ($("buyScore")) {
 
@@ -885,7 +1134,9 @@ function renderResult(result) {
     }
 
 
-    /* Market Analysis */
+    /* -----------------------------------------
+       MARKET ANALYSIS
+    ----------------------------------------- */
 
     const analysis =
         result.marketAnalysis ||
@@ -948,7 +1199,9 @@ function renderResult(result) {
     }
 
 
-    /* Indicators */
+    /* -----------------------------------------
+       INDICATORS
+    ----------------------------------------- */
 
     const indicators =
         result.indicators ||
@@ -958,7 +1211,9 @@ function renderResult(result) {
 
         $("ema9").textContent =
             indicators.ema9 != null
-                ? formatNumber(indicators.ema9)
+                ? formatNumber(
+                    indicators.ema9
+                )
                 : "--";
     }
 
@@ -966,7 +1221,9 @@ function renderResult(result) {
 
         $("ema21").textContent =
             indicators.ema21 != null
-                ? formatNumber(indicators.ema21)
+                ? formatNumber(
+                    indicators.ema21
+                )
                 : "--";
     }
 
@@ -974,7 +1231,9 @@ function renderResult(result) {
 
         $("rsi").textContent =
             indicators.rsi != null
-                ? formatNumber(indicators.rsi)
+                ? formatNumber(
+                    indicators.rsi
+                )
                 : "--";
     }
 
@@ -982,7 +1241,9 @@ function renderResult(result) {
 
         $("vwap").textContent =
             indicators.vwap != null
-                ? formatNumber(indicators.vwap)
+                ? formatNumber(
+                    indicators.vwap
+                )
                 : "--";
     }
 
@@ -990,12 +1251,16 @@ function renderResult(result) {
 
         $("volume").textContent =
             indicators.volume != null
-                ? String(indicators.volume)
+                ? String(
+                    indicators.volume
+                )
                 : "--";
     }
 
 
-    /* Active strategies */
+    /* -----------------------------------------
+       STRATEGIES
+    ----------------------------------------- */
 
     renderStrategies(
         result.strategies
@@ -1004,7 +1269,7 @@ function renderResult(result) {
 
 
 /* =========================================================
-   STRATEGY RENDERER
+   STRATEGY LIST
 ========================================================= */
 
 function renderStrategies(
@@ -1020,7 +1285,8 @@ function renderStrategies(
 
     if (
         !strategies ||
-        typeof strategies !== "object"
+        typeof strategies !==
+            "object"
     ) {
 
         list.innerHTML =
@@ -1063,10 +1329,13 @@ function renderStrategies(
                     "string"
                 ) {
 
+                    const text =
+                        value.toUpperCase();
+
                     return (
-                        value !== "NEUTRAL" &&
-                        value !== "WAIT" &&
-                        value !== "NONE"
+                        text !== "NEUTRAL" &&
+                        text !== "WAIT" &&
+                        text !== "NONE"
                     );
                 }
 
@@ -1128,179 +1397,52 @@ function renderStrategies(
                             signal
                         ).toUpperCase();
 
-                    const cls =
-                        upper.includes("BUY")
-                            ? "buy"
-                            : upper.includes("SELL")
-                                ? "sell"
-                                : "";
+                    let cls =
+                        "";
+
+                    if (
+                        upper.includes(
+                            "BUY"
+                        )
+                    ) {
+
+                        cls =
+                            "buy";
+
+                    } else if (
+                        upper.includes(
+                            "SELL"
+                        )
+                    ) {
+
+                        cls =
+                            "sell";
+                    }
 
                     return `
                         <div class="strategy-item">
+
                             <div>
-                                <strong>${escapeHtml(name)}</strong>
-                                <small>Active strategy signal</small>
+
+                                <strong>
+                                    ${escapeHtml(name)}
+                                </strong>
+
+                                <small>
+                                    Active strategy signal
+                                </small>
+
                             </div>
+
                             <div class="${cls}">
                                 ${escapeHtml(upper)}
                             </div>
+
                         </div>
                     `;
                 }
             )
             .join("");
-}
-
-
-/* =========================================================
-   HTML ESCAPE
-========================================================= */
-
-function escapeHtml(value) {
-
-    return String(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-}
-
-
-/* =========================================================
-   CANDLE DATA
-========================================================= */
-
-function extractCandles(data) {
-
-    if (!data) {
-        return [];
-    }
-
-    if (Array.isArray(data)) {
-        return data;
-    }
-
-    if (
-        Array.isArray(
-            data.candles
-        )
-    ) {
-        return data.candles;
-    }
-
-    if (
-        Array.isArray(
-            data.data
-        )
-    ) {
-        return data.data;
-    }
-
-    if (
-        Array.isArray(
-            data.data?.candles
-        )
-    ) {
-        return data.data.candles;
-    }
-
-    return [];
-}
-
-
-/* =========================================================
-   ANALYSIS
-========================================================= */
-
-async function analyzeCandles(
-    candleData
-) {
-
-    const candles =
-        extractCandles(
-            candleData
-        );
-
-    if (candles.length < 50) {
-
-        throw new Error(
-            `Not enough candles. Received ${candles.length}, minimum 50 required.`
-        );
-    }
-
-    /*
-     * Prefer the server analysis endpoint.
-     * This keeps the frontend and backend
-     * on the same strategy calculation.
-     */
-
-    try {
-
-        const result =
-            await apiFetch(
-                `${API_BASE}/api/analyze`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type":
-                            "application/json"
-                    },
-                    body: JSON.stringify({
-                        market:
-                            selectedMarket,
-                        candles:
-                            candles
-                    })
-                }
-            );
-
-        if (
-            result?.success !== false
-        ) {
-
-            return (
-                result?.result ||
-                result?.analysis ||
-                result
-            );
-        }
-
-    } catch (serverError) {
-
-        console.warn(
-            "Server analysis failed:",
-            serverError
-        );
-    }
-
-
-    /*
-     * Fallback:
-     * use the strategy.js engine loaded
-     * by index.html.
-     */
-
-    if (
-        typeof window.analyzeMarket ===
-        "function"
-    ) {
-
-        const localResult =
-            window.analyzeMarket(
-                candles,
-                selectedMarket
-            );
-
-        return (
-            localResult?.result ||
-            localResult
-        );
-    }
-
-    throw new Error(
-        "Analysis engine unavailable."
-    );
 }
 
 
@@ -1317,7 +1459,9 @@ async function loadOptionPremium(
     }
 
     const decision =
-        getDecision(result);
+        getDecision(
+            result
+        );
 
     if (
         decision !== "BUY" &&
@@ -1342,20 +1486,28 @@ async function loadOptionPremium(
         return;
     }
 
-    const side =
-        decision;
-
     const params =
-        new URLSearchParams({
-            market:
-                selectedMarket,
-            side:
-                side,
-            option_type:
-                optionType,
-            strike:
-                String(strike)
-        });
+        new URLSearchParams();
+
+    params.set(
+        "market",
+        selectedMarket
+    );
+
+    params.set(
+        "side",
+        decision
+    );
+
+    params.set(
+        "option_type",
+        optionType
+    );
+
+    params.set(
+        "strike",
+        String(strike)
+    );
 
     try {
 
@@ -1385,11 +1537,6 @@ function renderOptionPremium(
     if (!data) {
         return;
     }
-
-    /*
-     * Add compact option information
-     * below the trade levels if possible.
-     */
 
     let box =
         document.getElementById(
@@ -1425,34 +1572,36 @@ function renderOptionPremium(
             ></div>
             `;
 
-        const strategy =
-            document.querySelector(
-                "#strategyList"
-            )?.closest(
-                ".card"
-            );
-
-        if (strategy) {
-
-            strategy.parentNode.insertBefore(
-                box,
-                strategy
-            );
-
-        } else {
-
+        const app =
             document.querySelector(
                 ".app"
-            )?.appendChild(
+            );
+
+        const footer =
+            document.querySelector(
+                ".footer"
+            );
+
+        if (
+            app &&
+            footer
+        ) {
+
+            app.insertBefore(
+                box,
+                footer
+            );
+
+        } else if (app) {
+
+            app.appendChild(
                 box
             );
         }
     }
 
     const content =
-        document.getElementById(
-            "optionPremiumContent"
-        );
+        $("optionPremiumContent");
 
     if (!content) {
         return;
@@ -1463,6 +1612,11 @@ function renderOptionPremium(
         data.premium ??
         data.ltp ??
         data.price;
+
+    const expiry =
+        data.expiry ??
+        data.Expiry ??
+        "--";
 
     const entry =
         data.entry ??
@@ -1487,16 +1641,15 @@ function renderOptionPremium(
         data.t3 ??
         data.T3;
 
-    const expiry =
-        data.expiry ??
-        data.Expiry ??
-        "--";
-
     content.innerHTML =
         `
         <div>
             <strong>Premium:</strong>
-            ${premium != null ? formatNumber(premium) : "--"}
+            ${
+                premium != null
+                    ? formatNumber(premium)
+                    : "--"
+            }
         </div>
 
         <div>
@@ -1506,48 +1659,133 @@ function renderOptionPremium(
 
         <div>
             <strong>Entry:</strong>
-            ${entry != null ? formatNumber(entry) : "--"}
+            ${
+                entry != null
+                    ? formatNumber(entry)
+                    : "--"
+            }
         </div>
 
         <div>
             <strong>SL:</strong>
-            ${stopLoss != null ? formatNumber(stopLoss) : "--"}
+            ${
+                stopLoss != null
+                    ? formatNumber(stopLoss)
+                    : "--"
+            }
         </div>
 
         <div>
             <strong>T1:</strong>
-            ${t1 != null ? formatNumber(t1) : "--"}
+            ${
+                t1 != null
+                    ? formatNumber(t1)
+                    : "--"
+            }
+
             &nbsp;&nbsp;
 
             <strong>T2:</strong>
-            ${t2 != null ? formatNumber(t2) : "--"}
+            ${
+                t2 != null
+                    ? formatNumber(t2)
+                    : "--"
+            }
+
             &nbsp;&nbsp;
 
             <strong>T3:</strong>
-            ${t3 != null ? formatNumber(t3) : "--"}
+            ${
+                t3 != null
+                    ? formatNumber(t3)
+                    : "--"
+            }
         </div>
         `;
 }
 
 
 /* =========================================================
-   MAIN LOAD
+   CUSTOMER UI
 ========================================================= */
 
-async function loadMarket(
-    runAnalysis = true
-) {
+function cleanCustomerUI() {
+
+    const titles =
+        document.querySelectorAll(
+            ".card-title"
+        );
+
+    titles.forEach(
+        (title) => {
+
+            const text =
+                title.textContent
+                    .trim()
+                    .toLowerCase();
+
+            const card =
+                title.closest(
+                    ".card"
+                );
+
+            if (!card) {
+                return;
+            }
+
+            if (
+                text ===
+                    "strategy scores" ||
+                text ===
+                    "market analysis" ||
+                text ===
+                    "indicators" ||
+                text ===
+                    "active strategy signals"
+            ) {
+
+                card.style.display =
+                    "none";
+            }
+        }
+    );
+
+    const footer =
+        document.querySelector(
+            ".footer"
+        );
+
+    if (footer) {
+
+        footer.innerHTML =
+            `
+            SHIV AI TRADING • LIVE MARKET • 5 MIN
+            <br>
+            Paper / Testing Mode
+            `;
+    }
+}
+
+
+/* =========================================================
+   RUN ANALYSIS
+========================================================= */
+
+async function runAnalysis() {
 
     if (isLoading) {
         return;
     }
 
-    isLoading = true;
+    isLoading =
+        true;
 
     hideError();
 
+    resetTradeUI();
+
     setStatus(
-        `LOADING ${selectedMarket}...`,
+        `ANALYZING ${selectedMarket}...`,
         "#f59e0b"
     );
 
@@ -1565,40 +1803,38 @@ async function loadMarket(
 
     try {
 
+        /*
+         * 1. Live spot
+         */
+
         await loadSpot();
 
-        if (!runAnalysis) {
 
-            setStatus(
-                `LIVE • ${selectedMarket} • 5 MIN`,
-                "#36d399"
-            );
+        /*
+         * 2. Live candles
+         */
 
-            return;
-        }
+        const candles =
+            await loadCandles();
 
 
-        resetTradeUI();
+        console.log(
+            "SHIV AI CANDLES:",
+            candles.length
+        );
 
 
-        const candleData =
-            await apiFetch(
-                `${API_BASE}/api/candles?market=${encodeURIComponent(selectedMarket)}`
-            );
-
+        /*
+         * 3. Existing strategy.js
+         *
+         * IMPORTANT:
+         * No strategy calculation is changed.
+         */
 
         const result =
-            await analyzeCandles(
-                candleData
+            runStrategyEngine(
+                candles
             );
-
-
-        if (!result) {
-
-            throw new Error(
-                "Analysis returned no result."
-            );
-        }
 
 
         console.log(
@@ -1607,10 +1843,19 @@ async function loadMarket(
         );
 
 
+        /*
+         * 4. Render exact strategy result
+         */
+
         renderResult(
             result
         );
 
+
+        /*
+         * 5. Option premium only
+         *    when strategy gives BUY/SELL
+         */
 
         await loadOptionPremium(
             result
@@ -1629,7 +1874,9 @@ async function loadMarket(
             error
         );
 
-        setDataSource(false);
+        setDataSource(
+            false
+        );
 
         setStatus(
             "ERROR",
@@ -1638,7 +1885,7 @@ async function loadMarket(
 
         showError(
             error?.message ||
-            "Unable to load market data."
+            "Unable to complete AI analysis."
         );
 
     } finally {
@@ -1677,83 +1924,12 @@ function startAutoRefresh() {
 
                 if (!isLoading) {
 
-                    loadMarket(
-                        true
-                    );
+                    runAnalysis();
                 }
 
             },
             REFRESH_MS
         );
-}
-
-
-/* =========================================================
-   HIDE INTERNAL DEBUG SECTIONS
-   Customer-facing clean interface
-========================================================= */
-
-function cleanCustomerUI() {
-
-    const titles =
-        document.querySelectorAll(
-            ".card-title"
-        );
-
-    titles.forEach(
-        (title) => {
-
-            const text =
-                title.textContent
-                    .trim()
-                    .toLowerCase();
-
-            const card =
-                title.closest(
-                    ".card"
-                );
-
-            if (!card) {
-                return;
-            }
-
-            /*
-             * Keep Trade Levels.
-             * Hide internal strategy/indicator
-             * sections from customer UI.
-             */
-
-            if (
-                text ===
-                    "strategy scores" ||
-                text ===
-                    "market analysis" ||
-                text ===
-                    "indicators" ||
-                text ===
-                    "active strategy signals"
-            ) {
-
-                card.style.display =
-                    "none";
-            }
-        }
-    );
-
-    const footer =
-        document.querySelector(
-            ".footer"
-        );
-
-    if (footer) {
-
-        footer.innerHTML =
-            `
-            SHIV AI TRADING • LIVE MARKET • 5 MIN
-            <br>
-            Paper / Testing Mode
-            `;
-    }
 }
 
 
@@ -1772,12 +1948,7 @@ function setupRunButton() {
 
     button.addEventListener(
         "click",
-        () => {
-
-            loadMarket(
-                true
-            );
-        }
+        runAnalysis
     );
 }
 
@@ -1798,11 +1969,21 @@ async function init() {
 
         setupRunButton();
 
-        setDataSource(true);
-
-        await loadMarket(
+        setDataSource(
             true
         );
+
+
+        /*
+         * First live run
+         */
+
+        await runAnalysis();
+
+
+        /*
+         * Continue every 30 seconds
+         */
 
         startAutoRefresh();
 
