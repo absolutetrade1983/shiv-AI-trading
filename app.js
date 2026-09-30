@@ -594,30 +594,26 @@ async function loadCandles() {
    EXACT STRATEGY ENGINE CONNECTION
 ========================================================= */
 
-function runStrategyEngine(
-    candles
-) {
+function runStrategyEngine(candles) {
 
     /*
-     * strategy.js is loaded BEFORE app.js
-     * in index.html.
-     *
-     * The existing strategy engine remains
-     * completely untouched.
+     * strategy.js exports the engine as:
+     * window.SHIV_AI_STRATEGY.analyzeMarket
      */
 
     if (
-        typeof window.analyzeMarket !==
-        "function"
+        !window.SHIV_AI_STRATEGY ||
+        typeof window.SHIV_AI_STRATEGY.analyzeMarket !==
+            "function"
     ) {
 
         throw new Error(
-            "strategy.js loaded, but analyzeMarket() was not found."
+            "SHIV AI strategy engine not loaded correctly."
         );
     }
 
     const result =
-        window.analyzeMarket(
+        window.SHIV_AI_STRATEGY.analyzeMarket(
             candles,
             selectedMarket
         );
@@ -629,12 +625,18 @@ function runStrategyEngine(
         );
     }
 
-    return (
-        result.result ||
-        result.analysis ||
-        result
-    );
+    if (result.success === false) {
+
+        throw new Error(
+            result.error ||
+            "Strategy analysis failed."
+        );
+    }
+
+    return result;
 }
+
+    
 
 
 /* =========================================================
