@@ -1496,10 +1496,10 @@ async function loadOptionPremium(
         selectedMarket
     );
 
-    params.set(
-        "side",
-        decision
-    );
+   params.set(
+    "direction",
+    decision
+);
 
     params.set(
         "option_type",
