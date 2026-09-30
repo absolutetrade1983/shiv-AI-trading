@@ -94,29 +94,37 @@ function isValidNumber(x) {
 function normalizeCandles(candles) {
 
     return (candles || [])
-        .map((c, i) => ({
-            time:
-                c.time ??
-                c.timestamp ??
-                i,
+        .map((c, i) => {
 
-            open:
-                Number(c.open),
+            // Angel One array format:
+            // [time, open, high, low, close, volume]
 
-            high:
-                Number(c.high),
+            if (Array.isArray(c)) {
+                return {
+                    time: c[0] ?? i,
+                    open: Number(c[1]),
+                    high: Number(c[2]),
+                    low: Number(c[3]),
+                    close: Number(c[4]),
+                    volume: Number(c[5] ?? 0)
+                };
+            }
 
-            low:
-                Number(c.low),
+            // Object format fallback
+            return {
+                time:
+                    c.time ??
+                    c.timestamp ??
+                    i,
 
-            close:
-                Number(c.close),
+                open: Number(c.open),
+                high: Number(c.high),
+                low: Number(c.low),
+                close: Number(c.close),
+                volume: Number(c.volume ?? 0)
+            };
 
-            volume:
-                Number(
-                    c.volume ?? 0
-                )
-        }))
+        })
         .filter(c =>
             isValidNumber(c.open) &&
             isValidNumber(c.high) &&
